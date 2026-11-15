@@ -1,0 +1,20 @@
+{
+  // Processo principale (Bun), core, test e configurazioni di build.
+  // La webview è controllata da tsconfig.json.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "target": "ESNext",
+    "lib": ["ESNext", "DOM", "DOM.Iterable"],
+    "types": ["bun"]
+  },
+  "include": [
+    "src/bun",
+    "src/core",
+    "src/shared",
+    "src/**/*.test.ts",
+    "src/test-setup.ts",
+    "*.config.ts",
+    "scripts"
+  ],
+  "exclude": ["node_modules", "dist", "build"]
+}

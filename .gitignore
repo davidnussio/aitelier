@@ -1,0 +1,18 @@
+node_modules
+build
+dist
+dist-preview
+artifacts
+.DS_Store
+**/.DS_Store
+.claude/
+*.sqlite
+*.db
+*.db-wal
+*.db-shm
+secrets.json
+.env
+.env.*
+# Proiezione del devkit Electrobun 2.x (generata da `electrobun prepare`)
+.hutch/
+.cottontail-tmp/

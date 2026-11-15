@@ -1,0 +1,41 @@
+{
+  "name": "bottega",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Bottega: studio di immagini di famiglia con stili coerenti (Electrobun + GPT Image)",
+  "type": "module",
+  "scripts": {
+    "start": "electrobun prepare && vite build && electrobun dev",
+    "dev": "electrobun dev --watch",
+    "dev:hmr": "concurrently \"bun run hmr\" \"bun run start\"",
+    "hmr": "electrobun prepare && vite --port 5291",
+    "demo": "BOTTEGA_FAKE_OPENAI=1 bun run start",
+    "typecheck": "electrobun prepare && tsc -p tsconfig.json && tsc -p tsconfig.bun.json",
+    "lint": "oxlint --deny-warnings",
+    "format": "oxfmt",
+    "test": "bun test src",
+    "check": "bun run typecheck && bun run lint && bun run test",
+    "build": "electrobun prepare && vite build && electrobun build --env=stable",
+    "preview": "electrobun prepare && vite build --config vite.preview.config.ts && bun scripts/preview.ts"
+  },
+  "dependencies": {
+    "lucide-react": "^1.57.0",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.3.3",
+    "@types/bun": "1.4.4",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.2",
+    "concurrently": "^10.0.6",
+    "electrobun": "2.0.6",
+    "oxfmt": "^0.78.0",
+    "oxlint": "^1.93.0",
+    "tailwindcss": "^4.3.3",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.4"
+  },
+  "packageManager": "bun@1.4.4"
+}
