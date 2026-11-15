@@ -145,7 +145,7 @@ function EmptyThread({ hasStyles }: { hasStyles: boolean }) {
       <p className="mt-2 text-[13.5px]">
         {hasStyles
           ? "Scegli lo stile qui sotto, descrivi l'immagine che vuoi e premi Invio."
-          : "Nel pannello a destra crea lo stile A: descrivilo a parole oppure parti da un'immagine che ti piace. Puoi anche generare subito senza stile."}
+          : "Nel pannello a destra crea uno stile (a parole o da un'immagine che ti piace) oppure prendine uno dalla libreria. Puoi anche generare subito senza stile."}
       </p>
     </div>
   );

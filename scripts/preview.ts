@@ -9,6 +9,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { Backups } from "../src/core/backup";
 import { Db } from "../src/core/db";
 import { FakeProvider, fakeImage } from "../src/core/fake-provider";
 import { Files } from "../src/core/files";
@@ -30,7 +31,15 @@ const emit = (event: JobEvent) => {
 const db = new Db(path.join(dataDir, "app.db"));
 const files = new Files(dataDir);
 const provider = new FakeProvider(900);
-const studio = new Studio({ db, files, provider, emit, log: (m, e) => console.warn(m, e) });
+const studio = new Studio({
+  db,
+  files,
+  provider,
+  emit,
+  log: (m, e) => console.warn(m, e),
+  info: (m) => console.log(m),
+});
+const backups = new Backups(dataDir);
 studio.recoverInterrupted();
 const media = startMediaServer(dataDir);
 
@@ -45,6 +54,7 @@ const handlers = createHandlers({
     remove: async () => {},
     status: async () => ({ set: true, masked: "demo", storage: null }),
   },
+  backups,
   demo: true,
   info: () => ({ version: pkg.version, mediaBase: media.url, mediaToken: media.token, demo: true, dataDir }),
   picturesDir: path.join(dataDir, "export"),
@@ -52,7 +62,11 @@ const handlers = createHandlers({
   pickImage: async () => fakeImage(`STILE:\nimmagine caricata ${++picks}\n\n`, "1024x1024", picks),
   showItemInFolder: (p) => console.log("Mostra nel Finder:", p),
   openExternal: (url) => console.log("Apri:", url),
-  log: { error: (m, e) => console.error(m, e) },
+  log: {
+    file: path.join(dataDir, "logs", "bottega.log"),
+    info: (m) => console.log(m),
+    error: (m, e) => console.error(m, e),
+  },
 });
 
 Bun.serve({

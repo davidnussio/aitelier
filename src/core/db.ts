@@ -12,18 +12,18 @@ import type {
   Message,
   MessageKind,
   MessageOptions,
-  Slot,
   Style,
   StyleDescription,
   StyleLabel,
   StyleParams,
   StyleRef,
+  StyleTrial,
   Thread,
   ThreadSummary,
   UserError,
 } from "../shared/types";
 
-const MIGRATIONS: string[] = [
+export const MIGRATIONS: string[] = [
   // 1. Schema iniziale
   `
   CREATE TABLE threads (
@@ -96,7 +96,61 @@ const MIGRATIONS: string[] = [
     valore TEXT NOT NULL
   );
   `,
+  // 2. Stili globali: una libreria senza limite di numero, usata dai progetti
+  //    tramite thread_styles. Gli slot A/B/C diventano l'ordine nel progetto.
+  `
+  CREATE TABLE styles_new (
+    id TEXT PRIMARY KEY,
+    nome TEXT NOT NULL,
+    colore TEXT NOT NULL,
+    richiesta TEXT NOT NULL DEFAULT '',
+    descrizione TEXT,
+    in_descrizione INTEGER NOT NULL DEFAULT 0,
+    errore_descrizione TEXT,
+    parametri TEXT NOT NULL,
+    bloccato INTEGER NOT NULL DEFAULT 0,
+    creato_il TEXT NOT NULL,
+    aggiornato_il TEXT NOT NULL
+  );
+  INSERT INTO styles_new
+    SELECT id, nome, colore, richiesta, descrizione, in_descrizione, errore_descrizione, parametri, bloccato, creato_il, creato_il
+    FROM styles;
+  CREATE TABLE thread_styles (
+    thread_id TEXT NOT NULL REFERENCES threads(id) ON DELETE CASCADE,
+    style_id TEXT NOT NULL REFERENCES styles(id) ON DELETE CASCADE,
+    ordine INTEGER NOT NULL,
+    PRIMARY KEY (thread_id, style_id)
+  );
+  INSERT INTO thread_styles SELECT thread_id, id, slot FROM styles;
+  ALTER TABLE threads ADD COLUMN ultimo_stile_id TEXT;
+  UPDATE threads SET ultimo_stile_id =
+    (SELECT s.id FROM styles s WHERE s.thread_id = threads.id AND s.slot = threads.ultimo_slot);
+  DROP TABLE styles;
+  ALTER TABLE styles_new RENAME TO styles;
+  CREATE INDEX thread_styles_style ON thread_styles(style_id);
+  `,
+  // 3. Prove di uno stile creato da descrizione fuori da un progetto: stanno
+  //    con lo stile, non in una chat.
+  `
+  CREATE TABLE style_trials (
+    id TEXT PRIMARY KEY,
+    style_id TEXT NOT NULL REFERENCES styles(id) ON DELETE CASCADE,
+    percorso_file TEXT,
+    miniatura TEXT,
+    dimensione TEXT NOT NULL,
+    modello TEXT NOT NULL,
+    token_ingresso INTEGER NOT NULL DEFAULT 0,
+    token_uscita INTEGER NOT NULL DEFAULT 0,
+    costo_usd REAL NOT NULL DEFAULT 0,
+    stato TEXT NOT NULL,
+    errore TEXT,
+    creato_il TEXT NOT NULL
+  );
+  CREATE INDEX style_trials_style ON style_trials(style_id, creato_il);
+  `,
 ];
+
+export const SCHEMA_VERSION = MIGRATIONS.length;
 
 export const newId = () => crypto.randomUUID();
 const now = () => new Date().toISOString();
@@ -124,13 +178,36 @@ export class Db {
     this.migrate();
   }
 
+  /** Versione dello schema di un file di database, senza migrarlo. */
+  static versionOf(path: string): number {
+    if (!fs.existsSync(path)) return 0;
+    // Non in sola lettura: un database WAL senza il file -shm non si aprirebbe.
+    const db = new Database(path, { create: false });
+    try {
+      return (db.query("PRAGMA user_version").get() as { user_version: number }).user_version;
+    } finally {
+      db.close();
+    }
+  }
+
   migrate(): void {
     const version = (this.sqlite.query("PRAGMA user_version").get() as { user_version: number }).user_version;
-    for (let i = version; i < MIGRATIONS.length; i++) {
-      this.sqlite.transaction(() => {
-        this.sqlite.run(MIGRATIONS[i]!);
-        this.sqlite.run(`PRAGMA user_version = ${i + 1}`);
-      })();
+    if (version >= MIGRATIONS.length) return;
+    // Le migrazioni ricreano tabelle: le chiavi esterne restano spente finché
+    // non è finita, poi si controlla che siano tutte coerenti.
+    this.sqlite.run("PRAGMA foreign_keys = OFF");
+    try {
+      for (let i = version; i < MIGRATIONS.length; i++) {
+        this.sqlite.transaction(() => {
+          this.sqlite.run(MIGRATIONS[i]!);
+          const broken = this.sqlite.query("PRAGMA foreign_key_check").all();
+          if (broken.length > 0)
+            throw new Error(`Migrazione ${i + 1}: ${broken.length} riferimenti non validi`);
+          this.sqlite.run(`PRAGMA user_version = ${i + 1}`);
+        })();
+      }
+    } finally {
+      this.sqlite.run("PRAGMA foreign_keys = ON");
     }
   }
 
@@ -163,7 +240,7 @@ export class Db {
       textLanguage: row.lingua_testi as string,
       imageModel: row.modello_fissato as string,
       preciseModel: row.modello_preciso as string,
-      lastSlot: (row.ultimo_slot as Slot | null) ?? null,
+      lastStyleId: (row.ultimo_stile_id as string | null) ?? null,
       createdAt: row.creato_il as string,
       updatedAt: row.aggiornato_il as string,
     };
@@ -206,7 +283,7 @@ export class Db {
       .query(
         `SELECT t.id, t.titolo, t.aggiornato_il,
            (SELECT COUNT(*) FROM images i WHERE i.thread_id = t.id AND i.stato = 'done') AS n,
-           (SELECT GROUP_CONCAT(colore, ',') FROM (SELECT colore FROM styles s WHERE s.thread_id = t.id ORDER BY slot)) AS colori
+           (SELECT GROUP_CONCAT(colore, ',') FROM (SELECT s.colore FROM thread_styles ts JOIN styles s ON s.id = ts.style_id WHERE ts.thread_id = t.id ORDER BY ts.ordine)) AS colori
          FROM threads t WHERE archiviato = 0 ORDER BY t.aggiornato_il DESC`,
       )
       .all() as Row[];
@@ -222,7 +299,7 @@ export class Db {
   updateThread(
     id: string,
     patch: Partial<
-      Pick<Thread, "title" | "contextNotes" | "textLanguage" | "imageModel" | "preciseModel" | "lastSlot">
+      Pick<Thread, "title" | "contextNotes" | "textLanguage" | "imageModel" | "preciseModel" | "lastStyleId">
     >,
   ): void {
     const columns: Record<string, string> = {
@@ -231,7 +308,7 @@ export class Db {
       textLanguage: "lingua_testi",
       imageModel: "modello_fissato",
       preciseModel: "modello_preciso",
-      lastSlot: "ultimo_slot",
+      lastStyleId: "ultimo_stile_id",
     };
     const entries = Object.entries(patch).filter(([k, v]) => k in columns && v !== undefined);
     const sets = [...entries.map(([k]) => `${columns[k]} = ?`), "aggiornato_il = ?"];
@@ -248,13 +325,11 @@ export class Db {
     this.sqlite.query("DELETE FROM threads WHERE id = ?").run(id);
   }
 
-  // --- Stili ---
+  // --- Stili (libreria globale) ---
 
   #style(row: Row): Style {
     return {
       id: row.id as string,
-      threadId: row.thread_id as string,
-      slot: row.slot as Slot,
       name: row.nome as string,
       color: row.colore as string,
       brief: row.richiesta as string,
@@ -264,6 +339,9 @@ export class Db {
       params: json<StyleParams>(row.parametri as string)!,
       locked: Boolean(row.bloccato),
       refs: this.listRefs(row.id as string),
+      projectCount: (row.progetti as number | undefined) ?? 0,
+      trials: this.listTrials(row.id as string),
+      updatedAt: row.aggiornato_il as string,
     };
   }
 
@@ -278,49 +356,74 @@ export class Db {
     }));
   }
 
+  static readonly #STYLE_COLUMNS =
+    "s.*, (SELECT COUNT(*) FROM thread_styles x WHERE x.style_id = s.id) AS progetti";
+
+  /** Tutti gli stili, i più usati di recente per primi. */
+  listAllStyles(): Style[] {
+    const rows = this.sqlite
+      .query(`SELECT ${Db.#STYLE_COLUMNS} FROM styles s ORDER BY s.aggiornato_il DESC`)
+      .all() as Row[];
+    return rows.map((r) => this.#style(r));
+  }
+
+  /** Gli stili di un progetto, nell'ordine in cui sono stati aggiunti. */
   listStyles(threadId: string): Style[] {
     const rows = this.sqlite
-      .query("SELECT * FROM styles WHERE thread_id = ? ORDER BY slot")
+      .query(
+        `SELECT ${Db.#STYLE_COLUMNS} FROM thread_styles ts JOIN styles s ON s.id = ts.style_id
+         WHERE ts.thread_id = ? ORDER BY ts.ordine`,
+      )
       .all(threadId) as Row[];
     return rows.map((r) => this.#style(r));
   }
 
   getStyle(id: string): Style | null {
-    const row = this.sqlite.query("SELECT * FROM styles WHERE id = ?").get(id) as Row | null;
-    return row ? this.#style(row) : null;
-  }
-
-  getStyleBySlot(threadId: string, slot: Slot): Style | null {
     const row = this.sqlite
-      .query("SELECT * FROM styles WHERE thread_id = ? AND slot = ?")
-      .get(threadId, slot) as Row | null;
+      .query(`SELECT ${Db.#STYLE_COLUMNS} FROM styles s WHERE s.id = ?`)
+      .get(id) as Row | null;
     return row ? this.#style(row) : null;
   }
 
-  createStyle(input: {
-    threadId: string;
-    slot: Slot;
-    name: string;
-    color: string;
-    brief: string;
-    params: StyleParams;
-  }): Style {
+  createStyle(input: { name: string; color: string; brief: string; params: StyleParams }): Style {
     const id = newId();
+    const t = now();
     this.sqlite
       .query(
-        `INSERT INTO styles (id, thread_id, slot, nome, colore, richiesta, parametri, creato_il) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO styles (id, nome, colore, richiesta, parametri, creato_il, aggiornato_il) VALUES (?, ?, ?, ?, ?, ?, ?)`,
       )
-      .run(
-        id,
-        input.threadId,
-        input.slot,
-        input.name,
-        input.color,
-        input.brief,
-        JSON.stringify(input.params),
-        now(),
-      );
+      .run(id, input.name, input.color, input.brief, JSON.stringify(input.params), t, t);
     return this.getStyle(id)!;
+  }
+
+  attachStyle(threadId: string, styleId: string): void {
+    const max = this.sqlite
+      .query("SELECT COALESCE(MAX(ordine), 0) AS m FROM thread_styles WHERE thread_id = ?")
+      .get(threadId) as Row;
+    this.sqlite
+      .query("INSERT OR IGNORE INTO thread_styles (thread_id, style_id, ordine) VALUES (?, ?, ?)")
+      .run(threadId, styleId, (max.m as number) + 1);
+  }
+
+  detachStyle(threadId: string, styleId: string): void {
+    this.sqlite
+      .query("DELETE FROM thread_styles WHERE thread_id = ? AND style_id = ?")
+      .run(threadId, styleId);
+    this.sqlite
+      .query("UPDATE threads SET ultimo_stile_id = NULL WHERE id = ? AND ultimo_stile_id = ?")
+      .run(threadId, styleId);
+  }
+
+  isAttached(threadId: string, styleId: string): boolean {
+    return Boolean(
+      this.sqlite
+        .query("SELECT 1 FROM thread_styles WHERE thread_id = ? AND style_id = ?")
+        .get(threadId, styleId),
+    );
+  }
+
+  touchStyle(id: string): void {
+    this.sqlite.query("UPDATE styles SET aggiornato_il = ? WHERE id = ?").run(now(), id);
   }
 
   updateStyle(
@@ -353,6 +456,7 @@ export class Db {
 
   deleteStyle(id: string): void {
     this.sqlite.query("DELETE FROM styles WHERE id = ?").run(id);
+    this.sqlite.query("UPDATE threads SET ultimo_stile_id = NULL WHERE ultimo_stile_id = ?").run(id);
   }
 
   addRef(styleId: string, refId: string, path: string): StyleRef {
@@ -495,9 +599,71 @@ export class Db {
 
   /** Lavori rimasti a metà quando l'app è stata chiusa. */
   failInterrupted(error: UserError): number {
-    return this.sqlite
+    const errorJson = JSON.stringify(error);
+    const images = this.sqlite
       .query("UPDATE images SET stato = 'failed', errore = ? WHERE stato IN ('queued', 'running')")
-      .run(JSON.stringify(error)).changes;
+      .run(errorJson).changes;
+    const trials = this.sqlite
+      .query("UPDATE style_trials SET stato = 'failed', errore = ? WHERE stato IN ('queued', 'running')")
+      .run(errorJson).changes;
+    return images + trials;
+  }
+
+  // --- Prove degli stili ---
+
+  listTrials(styleId: string): StyleTrial[] {
+    const rows = this.sqlite
+      .query("SELECT * FROM style_trials WHERE style_id = ? ORDER BY creato_il, rowid")
+      .all(styleId) as Row[];
+    return rows.map((r) => this.#trial(r));
+  }
+
+  #trial(r: Row): StyleTrial {
+    return {
+      id: r.id as string,
+      styleId: r.style_id as string,
+      path: (r.percorso_file as string | null) ?? null,
+      thumbPath: (r.miniatura as string | null) ?? null,
+      size: r.dimensione as string,
+      status: r.stato as ImageStatus,
+      error: json<UserError>(r.errore as string | null),
+    };
+  }
+
+  getTrial(id: string): StyleTrial | null {
+    const row = this.sqlite.query("SELECT * FROM style_trials WHERE id = ?").get(id) as Row | null;
+    return row ? this.#trial(row) : null;
+  }
+
+  createTrial(styleId: string, size: string, model: string): string {
+    const id = newId();
+    this.sqlite
+      .query(
+        `INSERT INTO style_trials (id, style_id, dimensione, modello, stato, creato_il) VALUES (?, ?, ?, ?, 'queued', ?)`,
+      )
+      .run(id, styleId, size, model, now());
+    return id;
+  }
+
+  setTrialStatus(id: string, status: ImageStatus, error: UserError | null = null): void {
+    this.sqlite
+      .query("UPDATE style_trials SET stato = ?, errore = ? WHERE id = ?")
+      .run(status, error ? JSON.stringify(error) : null, id);
+  }
+
+  completeTrial(
+    id: string,
+    result: { path: string; thumbPath: string; inputTokens: number; outputTokens: number; costUsd: number },
+  ): void {
+    this.sqlite
+      .query(
+        `UPDATE style_trials SET stato = 'done', errore = NULL, percorso_file = ?, miniatura = ?, token_ingresso = ?, token_uscita = ?, costo_usd = ? WHERE id = ?`,
+      )
+      .run(result.path, result.thumbPath, result.inputTokens, result.outputTokens, result.costUsd, id);
+  }
+
+  deleteTrial(id: string): void {
+    this.sqlite.query("DELETE FROM style_trials WHERE id = ?").run(id);
   }
 
   listMessages(threadId: string): Message[] {
@@ -538,7 +704,10 @@ export class Db {
   monthCostUsd(date = new Date()): number {
     const start = new Date(date.getFullYear(), date.getMonth(), 1).toISOString();
     const row = this.sqlite
-      .query("SELECT COALESCE(SUM(costo_usd), 0) AS s FROM images WHERE creato_il >= ?")
+      .query(
+        `SELECT (SELECT COALESCE(SUM(costo_usd), 0) FROM images WHERE creato_il >= ?1)
+              + (SELECT COALESCE(SUM(costo_usd), 0) FROM style_trials WHERE creato_il >= ?1) AS s`,
+      )
       .get(start) as Row;
     return row.s as number;
   }

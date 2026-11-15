@@ -47,6 +47,14 @@ textarea,
   outline-offset: 2px;
 }
 
+/* I campi di testo mostrano il fuoco con il proprio bordo (la barra di
+   scrittura con il colore dello stile): niente contorno in più. */
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  outline: none;
+}
+
 ::-webkit-scrollbar {
   width: 10px;
   height: 10px;

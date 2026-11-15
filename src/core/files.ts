@@ -54,6 +54,21 @@ export class Files {
     return { path: rel, thumbPath: thumbRel };
   }
 
+  /** Salva una prova di stile e la sua miniatura, nella cartella dello stile. */
+  async saveTrial(
+    styleId: string,
+    trialId: string,
+    png: Uint8Array,
+  ): Promise<{ path: string; thumbPath: string }> {
+    const rel = await this.#write(`styles/${styleId}/prove/${trialId}.png`, png);
+    const thumb = await new Bun.Image(png)
+      .resize(THUMB_MAX_SIDE, THUMB_MAX_SIDE, { fit: "inside", withoutEnlargement: true })
+      .webp({ quality: 82 })
+      .bytes();
+    const thumbRel = await this.#write(`styles/${styleId}/prove/${trialId}.webp`, thumb);
+    return { path: rel, thumbPath: thumbRel };
+  }
+
   /** Salva un'àncora di stile ridotta a ≤ 1024 px: si paga a ogni chiamata. */
   async saveRef(styleId: string, refId: string, source: Uint8Array): Promise<string> {
     const png = await new Bun.Image(source, { maxPixels: 80_000_000 })

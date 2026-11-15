@@ -3,13 +3,16 @@
  * desktop (src/bun/index.ts) e il server di anteprima nel browser
  * (scripts/preview.ts). Le funzioni native arrivano come dipendenze.
  */
+import fs from "node:fs";
 import path from "node:path";
+import type { Backups } from "../core/backup";
 import { AppError, ProviderError } from "../core/errors";
 import type { Files } from "../core/files";
 import type { ImageProvider } from "../core/provider";
 import type { Studio } from "../core/studio";
 import type { AppInfo, BottegaRPC, Result } from "../shared/rpc";
-import type { ApiKeyStatus, Settings, VerifyResult } from "../shared/types";
+import type { ApiKeyStatus, BackupState, Settings, VerifyResult } from "../shared/types";
+import { readLogTail } from "./log";
 
 type Requests = BottegaRPC["bun"]["requests"];
 export type Handlers = {
@@ -28,17 +31,22 @@ export interface HandlerDeps {
   files: Files;
   provider: ImageProvider;
   secrets: KeyStore;
+  backups: Backups;
   demo: boolean;
   info: () => AppInfo;
   picturesDir: string;
   pickImage: () => Promise<Uint8Array | null>;
   showItemInFolder: (absPath: string) => void;
   openExternal: (url: string) => void;
-  log: { error: (message: string, error?: unknown) => void };
+  log: {
+    file: string;
+    info: (message: string) => void;
+    error: (message: string, error?: unknown) => void;
+  };
 }
 
 export function createHandlers(deps: HandlerDeps): Handlers {
-  const { studio, files, provider, secrets, demo, pickImage, log } = deps;
+  const { studio, files, provider, secrets, backups, demo, pickImage, log } = deps;
 
   /** Ogni richiesta risponde con un valore o con un messaggio già leggibile. */
   async function handle<T>(name: string, fn: () => T | Promise<T>): Promise<Result<T>> {
@@ -75,6 +83,12 @@ export function createHandlers(deps: HandlerDeps): Handlers {
     }
   }
 
+  const backupState = (): BackupState => ({
+    folder: backups.dir,
+    backups: backups.list(),
+    pendingRestore: backups.pendingRestore(),
+  });
+
   return {
     appInfo: async () => handle("appInfo", deps.info),
 
@@ -84,19 +98,34 @@ export function createHandlers(deps: HandlerDeps): Handlers {
     threadsDelete: ({ id }) =>
       handle("threadsDelete", () => {
         studio.deleteThread(id);
+        log.info(`Progetto ${id} eliminato`);
         return true as const;
       }),
     threadGet: ({ id }) => handle("threadGet", () => studio.getThread(id)),
 
-    stylesCreateFromBrief: ({ threadId, slot, input, brief }) =>
-      handle("stylesCreateFromBrief", () => studio.createStyleFromBrief(threadId, slot, input, brief).style),
-    stylesCreateFromFile: ({ threadId, slot, input }) =>
+    stylesList: () => handle("stylesList", () => studio.listStyles()),
+    stylesCreateFromBrief: ({ threadId, input, brief }) =>
+      handle("stylesCreateFromBrief", () => studio.createStyleFromBrief(threadId, input, brief).style),
+    stylesCreateFromFile: ({ threadId, input }) =>
       handle("stylesCreateFromFile", async () => {
         const bytes = await pickImage();
-        return bytes ? studio.createStyleFromFile(threadId, slot, input, bytes) : null;
+        return bytes ? studio.createStyleFromFile(threadId, input, bytes) : null;
       }),
-    stylesUseImage: ({ imageId, slot }) =>
-      handle("stylesUseImage", () => studio.useImageAsStyle(imageId, slot)),
+    stylesGenerateTrials: ({ styleId }) =>
+      handle("stylesGenerateTrials", () => studio.generateTrials(styleId)),
+    stylesUseTrial: ({ trialId }) => handle("stylesUseTrial", () => studio.useTrialAsAnchor(trialId)),
+    stylesDeleteTrial: ({ trialId }) => handle("stylesDeleteTrial", () => studio.deleteTrial(trialId)),
+    stylesUseImage: ({ imageId, styleId }) =>
+      handle("stylesUseImage", () => studio.useImageAsStyle(imageId, styleId)),
+    stylesAttach: ({ threadId, styleId }) =>
+      handle("stylesAttach", () => studio.attachStyle(threadId, styleId)),
+    stylesDetach: ({ threadId, styleId }) =>
+      handle("stylesDetach", () => {
+        studio.detachStyle(threadId, styleId);
+        return true as const;
+      }),
+    stylesDuplicate: ({ styleId, threadId }) =>
+      handle("stylesDuplicate", () => studio.duplicateStyle(styleId, threadId ?? null)),
     stylesAddRefFromFile: ({ styleId }) =>
       handle("stylesAddRefFromFile", async () => {
         const bytes = await pickImage();
@@ -104,9 +133,10 @@ export function createHandlers(deps: HandlerDeps): Handlers {
       }),
     stylesRemoveRef: ({ refId }) => handle("stylesRemoveRef", () => studio.removeRef(refId)),
     stylesUpdate: ({ styleId, patch }) => handle("stylesUpdate", () => studio.updateStyle(styleId, patch)),
-    stylesClear: ({ styleId }) =>
-      handle("stylesClear", () => {
-        studio.clearStyle(styleId);
+    stylesDelete: ({ styleId }) =>
+      handle("stylesDelete", () => {
+        studio.deleteStyle(styleId);
+        log.info(`Stile ${styleId} eliminato dalla libreria`);
         return true as const;
       }),
     stylesRedescribe: ({ styleId }) => handle("stylesRedescribe", () => studio.redescribe(styleId)),
@@ -140,11 +170,13 @@ export function createHandlers(deps: HandlerDeps): Handlers {
         if (!key) throw new AppError("Incolla la chiave API.");
         if (/\s/.test(key)) throw new AppError("La chiave non deve contenere spazi.");
         await secrets.set(key);
+        log.info("Chiave API salvata");
         return settings();
       }),
     apiKeyRemove: () =>
       handle("apiKeyRemove", async () => {
         await secrets.remove();
+        log.info("Chiave API rimossa");
         return settings();
       }),
     openExternal: ({ url }) =>
@@ -153,6 +185,38 @@ export function createHandlers(deps: HandlerDeps): Handlers {
           throw new AppError("Indirizzo non ammesso.");
         }
         deps.openExternal(url);
+        return true as const;
+      }),
+
+    backupsGet: () => handle("backupsGet", backupState),
+    backupsCreate: () =>
+      handle("backupsCreate", () => {
+        const info = backups.create("manuale");
+        log.info(`Backup manuale creato: ${info.name}`);
+        return backupState();
+      }),
+    backupsRestore: ({ name }) =>
+      handle("backupsRestore", () => {
+        backups.requestRestore(name);
+        log.info(`Ripristino prenotato per il prossimo avvio: ${name}`);
+        return backupState();
+      }),
+    backupsCancelRestore: () =>
+      handle("backupsCancelRestore", () => {
+        backups.cancelRestore();
+        log.info("Ripristino annullato");
+        return backupState();
+      }),
+    backupsReveal: () =>
+      handle("backupsReveal", () => {
+        fs.mkdirSync(backups.dir, { recursive: true });
+        deps.showItemInFolder(backups.dir);
+        return true as const;
+      }),
+    logsRead: () => handle("logsRead", () => ({ file: log.file, text: readLogTail(log.file) })),
+    logsReveal: () =>
+      handle("logsReveal", () => {
+        deps.showItemInFolder(log.file);
         return true as const;
       }),
   };

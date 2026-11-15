@@ -1,9 +1,10 @@
 # Bottega
 
 Studio di immagini di famiglia: un'app desktop locale che funziona come una
-chat, ma per le immagini. Ogni progetto conserva il suo contesto e fino a tre
-stili (A, B, C); ogni generazione riceve l'àncora e la descrizione del suo
-stile, così le immagini di oggi e quelle del mese prossimo sembrano della
+chat, ma per le immagini. Ogni progetto conserva il suo contesto; gli stili
+vivono in una libreria comune (voce «Stili» nella barra laterale), senza limite
+di numero, e ogni progetto usa quelli che vuole. Ogni generazione riceve
+l'àncora e la descrizione del suo stile, così le immagini di oggi e quelle del mese prossimo sembrano della
 stessa mano. Le immagini le fanno i modelli GPT Image di OpenAI.
 
 Specifica di prodotto: [docs/spec.md](docs/spec.md).
@@ -36,8 +37,21 @@ nei log o verso la webview.
 
 Cartella dati: `~/Library/Application Support/ch.dambox.bottega/<canale>/`
 (`BOTTEGA_HOME` per sceglierne un'altra): `app.db`, `images/<thread>/<id>.png`,
-`thumbs/` (WebP), `styles/<stile>/` (àncore ridotte a 1024 px), `logs/`.
-Il backup è una copia della cartella.
+`thumbs/` (WebP), `styles/<stile>/` (àncore ridotte a 1024 px), `logs/`,
+`backups/`.
+
+### Backup e registro
+
+- Backup automatico una volta al giorno (restano gli ultimi 10), uno prima di
+  ogni migrazione dello schema, uno manuale da Impostazioni › Backup. Ogni
+  backup è `app.db` (copia coerente con `VACUUM INTO`) più le immagini
+  collegate con hard link: costa pochi KB finché le immagini restano.
+- Il ripristino si prenota da Impostazioni › Backup e avviene al riavvio,
+  prima di aprire il database, dopo un backup di sicurezza dello stato attuale.
+- Il backup sta nella cartella dati: per proteggersi da un guasto del disco
+  va copiato altrove.
+- Registro in `logs/bottega.log` (ruotato a 2 MB), visibile da Impostazioni ›
+  Registro: generazioni con modello, token, costo e tempi, errori, backup.
 
 ### Coerenza di stile
 
@@ -48,6 +62,11 @@ cronologia della chat non viene inviata. I modelli sono fissati nel progetto
 alla sua creazione. Vedi `src/core/prompt.ts` e i test in `src/core/*.test.ts`.
 
 ### Scostamenti dalla specifica
+
+- Stili senza limite e globali (schema 2): non più 3 slot per progetto, ma una
+  libreria comune; un progetto usa gli stili tramite `thread_styles`. Lo stesso
+  stile vale in tutti i progetti che lo usano (il blocco evita cambi per
+  errore); «Duplica» crea una copia indipendente.
 
 - Le immagini arrivano alla webview da un server HTTP su `127.0.0.1` (porta
   casuale, token di sessione), non da uno schema dell'app: Electrobun 2.0 non
@@ -60,12 +79,14 @@ alla sua creazione. Vedi `src/core/prompt.ts` e i test in `src/core/*.test.ts`.
 ## Stato (fase 1 della specifica)
 
 Fatto: impostazioni con chiave e verifica, progetti con note di contesto,
-3 slot di stile (da descrizione con 3 prove, da immagine caricata, da immagine
-in chat), descrizione automatica dello stile, blocco, generazione con àncore e
+libreria degli stili senza limite (da descrizione con 3 prove, in chat o
+nella pagina Stili; da immagine caricata; da immagine in chat; duplica, usa in
+più progetti), descrizione automatica dello stile, blocco, generazione con àncore e
 varianti 1/2/4, modifica di un'immagine (nuova versione), rigenera con gli
-stessi criteri, errori in italiano, costo per immagine e del mese.
+stessi criteri, errori in italiano, costo per immagine e del mese, backup
+automatici e ripristino, registro consultabile.
 
-Da fare: galleria filtrabile e ZIP, libreria degli stili, navigazione tra
+Da fare: galleria filtrabile e ZIP, navigazione tra
 versioni, tetto di spesa mensile, esportazione/importazione dei progetti,
 icona e installer firmato.
 

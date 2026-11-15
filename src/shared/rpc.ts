@@ -5,12 +5,12 @@
  */
 import type { RPCSchema } from "electrobun/main/rpc";
 import type {
+  BackupState,
   EditableSettings,
   JobEvent,
   NewStyleInput,
   SendRequest,
   Settings,
-  Slot,
   Style,
   StyleDescription,
   StyleParams,
@@ -47,13 +47,20 @@ export type BottegaRPC = {
       threadsDelete: Req<{ id: string }, true>;
       threadGet: Req<{ id: string }, ThreadDetail>;
 
-      stylesCreateFromBrief: Req<
-        { threadId: string; slot: Slot; input: NewStyleInput; brief: string },
-        Style
-      >;
+      /** La libreria: tutti gli stili, usati o no. */
+      stylesList: Req<{}, Style[]>;
+      /** `threadId` null = dalla libreria: le prove restano nella scheda dello stile. */
+      stylesCreateFromBrief: Req<{ threadId: string | null; input: NewStyleInput; brief: string }, Style>;
+      stylesGenerateTrials: Req<{ styleId: string }, Style>;
+      stylesUseTrial: Req<{ trialId: string }, Style>;
+      stylesDeleteTrial: Req<{ trialId: string }, Style>;
       /** Apre la finestra nativa di scelta file; `null` se l'utente annulla. */
-      stylesCreateFromFile: Req<{ threadId: string; slot: Slot; input: NewStyleInput }, Style | null>;
-      stylesUseImage: Req<{ imageId: string; slot: Slot }, Style>;
+      stylesCreateFromFile: Req<{ threadId: string | null; input: NewStyleInput }, Style | null>;
+      /** `styleId` null = nuovo stile da questa immagine. */
+      stylesUseImage: Req<{ imageId: string; styleId: string | null }, Style>;
+      stylesAttach: Req<{ threadId: string; styleId: string }, Style>;
+      stylesDetach: Req<{ threadId: string; styleId: string }, true>;
+      stylesDuplicate: Req<{ styleId: string; threadId?: string | null }, Style>;
       stylesAddRefFromFile: Req<{ styleId: string }, Style | null>;
       stylesRemoveRef: Req<{ refId: string }, Style>;
       stylesUpdate: Req<
@@ -69,7 +76,7 @@ export type BottegaRPC = {
         },
         Style
       >;
-      stylesClear: Req<{ styleId: string }, true>;
+      stylesDelete: Req<{ styleId: string }, true>;
       stylesRedescribe: Req<{ styleId: string }, Style>;
 
       messagesSend: Req<SendRequest, { messageId: string; imageIds: string[] }>;
@@ -85,6 +92,15 @@ export type BottegaRPC = {
       apiKeySet: Req<{ apiKey: string }, Settings>;
       apiKeyRemove: Req<{}, Settings>;
       openExternal: Req<{ url: string }, true>;
+
+      backupsGet: Req<{}, BackupState>;
+      backupsCreate: Req<{}, BackupState>;
+      /** Prenota il ripristino: avviene al prossimo avvio dell'app. */
+      backupsRestore: Req<{ name: string }, BackupState>;
+      backupsCancelRestore: Req<{}, BackupState>;
+      backupsReveal: Req<{}, true>;
+      logsRead: Req<{}, { file: string; text: string }>;
+      logsReveal: Req<{}, true>;
     };
     messages: {
       webviewLog: { level: "warn" | "error"; message: string };

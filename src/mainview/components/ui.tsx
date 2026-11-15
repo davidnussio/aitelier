@@ -1,6 +1,14 @@
-import { type ButtonHTMLAttributes, type ReactNode, useEffect, useRef, useState } from "react";
+import {
+  type ButtonHTMLAttributes,
+  type ReactNode,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
+import { createPortal } from "react-dom";
 import { create } from "./store";
-import { SLOT_LETTER, type StyleLabel } from "../../shared/types";
+import type { StyleLabel } from "../../shared/types";
 
 export function cx(...parts: (string | false | null | undefined)[]) {
   return parts.filter(Boolean).join(" ");
@@ -76,7 +84,6 @@ export function StylePill({ label, compact }: { label: StyleLabel | null; compac
       style={{ background: `${label.color}1f`, color: label.color }}
     >
       <span className="size-2 shrink-0 rounded-full" style={{ background: label.color }} />
-      {label.slot && <span className="font-semibold">{SLOT_LETTER[label.slot]}</span>}
       {!compact && <span className="truncate">{label.name}</span>}
     </span>
   );
@@ -119,46 +126,84 @@ export function Dialog({
   );
 }
 
-/** Menu a comparsa ancorato a un pulsante. */
+/**
+ * Menu a comparsa ancorato a un pulsante. Vive in un portale a posizione
+ * fissa: un contenitore con overflow nascosto (le schede delle immagini) non
+ * lo taglia, e se sotto non c'è spazio si apre verso l'alto.
+ */
 export function Menu({
   trigger,
   children,
   align = "left",
 }: {
-  trigger: (props: { onClick: () => void; "aria-expanded": boolean }) => ReactNode;
+  trigger: (props: {
+    onClick: (e: React.MouseEvent<HTMLElement>) => void;
+    "aria-expanded": boolean;
+  }) => ReactNode;
   children: (close: () => void) => ReactNode;
   align?: "left" | "right";
 }) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
+  const [anchor, setAnchor] = useState<DOMRect | null>(null);
+  const [position, setPosition] = useState<React.CSSProperties>({ visibility: "hidden" });
+  const menu = useRef<HTMLDivElement>(null);
+  const close = () => setAnchor(null);
+
+  useLayoutEffect(() => {
+    if (!anchor || !menu.current) return;
+    const { width, height } = menu.current.getBoundingClientRect();
+    const margin = 8;
+    const below = anchor.bottom + 4;
+    const top =
+      below + height > window.innerHeight - margin ? Math.max(margin, anchor.top - 4 - height) : below;
+    const rawLeft = align === "right" ? anchor.right - width : anchor.left;
+    const left = Math.min(Math.max(margin, rawLeft), window.innerWidth - width - margin);
+    setPosition({ top, left });
+  }, [anchor, align]);
+
   useEffect(() => {
-    if (!open) return;
+    if (!anchor) return;
     const onDown = (e: MouseEvent) => {
-      if (!ref.current?.contains(e.target as Node)) setOpen(false);
+      if (!menu.current?.contains(e.target as Node)) setAnchor(null);
     };
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setAnchor(null);
+    const onMove = () => setAnchor(null);
     window.addEventListener("mousedown", onDown);
     window.addEventListener("keydown", onKey);
+    window.addEventListener("resize", onMove);
+    window.addEventListener("scroll", onMove, true);
     return () => {
       window.removeEventListener("mousedown", onDown);
       window.removeEventListener("keydown", onKey);
+      window.removeEventListener("resize", onMove);
+      window.removeEventListener("scroll", onMove, true);
     };
-  }, [open]);
+  }, [anchor]);
+
   return (
-    <div ref={ref} className="relative">
-      {trigger({ onClick: () => setOpen((o) => !o), "aria-expanded": open })}
-      {open && (
-        <div
-          role="menu"
-          className={cx(
-            "absolute z-30 mt-1 min-w-56 rounded-xl border border-line bg-card p-1 shadow-pop",
-            align === "right" ? "right-0" : "left-0",
-          )}
-        >
-          {children(() => setOpen(false))}
-        </div>
-      )}
-    </div>
+    <>
+      {trigger({
+        onClick: (e) => {
+          const rect = e.currentTarget.getBoundingClientRect();
+          setPosition({ visibility: "hidden" });
+          setAnchor((current) => (current ? null : rect));
+        },
+        "aria-expanded": Boolean(anchor),
+      })}
+      {anchor &&
+        createPortal(
+          <div
+            ref={menu}
+            role="menu"
+            tabIndex={-1}
+            onMouseDown={(e) => e.stopPropagation()}
+            className="fixed z-50 max-h-[70vh] min-w-56 overflow-y-auto rounded-xl border border-line bg-card p-1 shadow-pop"
+            style={position}
+          >
+            {children(close)}
+          </div>,
+          document.body,
+        )}
+    </>
   );
 }
 

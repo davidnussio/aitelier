@@ -5,7 +5,8 @@
 import Electrobun, { ApplicationMenu, BrowserView, BrowserWindow, Updater, Utils } from "electrobun/main";
 import fs from "node:fs";
 import path from "node:path";
-import { Db } from "../core/db";
+import { Backups } from "../core/backup";
+import { Db, SCHEMA_VERSION } from "../core/db";
 import { FakeProvider } from "../core/fake-provider";
 import { Files } from "../core/files";
 import { OpenAIProvider } from "../core/openai";
@@ -36,7 +37,22 @@ const secrets = new SecretStore({
 });
 const provider = demo ? new FakeProvider() : new OpenAIProvider({ getApiKey: () => secrets.get() });
 
-const db = new Db(path.join(dataDir, "app.db"));
+// Prima di aprire il database: ripristino prenotato, poi backup se lo schema
+// sta per essere aggiornato da una migrazione.
+const backups = new Backups(dataDir);
+try {
+  const restored = backups.applyPendingRestore();
+  if (restored) log.info(`Ripristinato il backup ${restored.name}`);
+} catch (error) {
+  log.error("Ripristino non riuscito", error);
+}
+const dbPath = path.join(dataDir, "app.db");
+const schemaVersion = Db.versionOf(dbPath);
+if (schemaVersion > 0 && schemaVersion < SCHEMA_VERSION) {
+  const info = backups.create("prima-della-migrazione");
+  log.info(`Schema ${schemaVersion} → ${SCHEMA_VERSION}: backup ${info.name}`);
+}
+const db = new Db(dbPath);
 const files = new Files(dataDir);
 /** Collegato alla finestra appena esiste. */
 let sendJobUpdate: (event: JobEvent) => void = () => {};
@@ -47,6 +63,7 @@ const studio = new Studio({
   provider,
   emit: (event) => sendJobUpdate(event),
   log: (m, e) => log.warn(m, e),
+  info: (m) => log.info(m),
 });
 studio.recoverInterrupted();
 
@@ -72,6 +89,7 @@ const rpc = BrowserView.defineRPC<BottegaRPC>({
       files,
       provider,
       secrets,
+      backups,
       demo,
       info: () => ({ version: pkg.version, mediaBase: media.url, mediaToken: media.token, demo, dataDir }),
       picturesDir: Utils.paths.pictures,
@@ -147,6 +165,16 @@ const mainWindow = new BrowserWindow({
   rpc,
 });
 sendJobUpdate = (event) => mainWindow.webview.rpc?.send.jobUpdate(event);
+
+// Backup automatico giornaliero, lontano dall'avvio.
+setTimeout(() => {
+  try {
+    const info = backups.autoIfDue();
+    if (info) log.info(`Backup automatico: ${info.name}`);
+  } catch (error) {
+    log.error("Backup automatico non riuscito", error);
+  }
+}, 10_000);
 
 Electrobun.events.on("before-quit", () => {
   log.info("Chiusura");

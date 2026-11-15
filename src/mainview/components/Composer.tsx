@@ -1,15 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { ArrowUp, CornerDownRight, X } from "lucide-react";
-import {
-  FORMAT_LABEL,
-  SLOT_LETTER,
-  SLOTS,
-  type Format,
-  type GeneratedImage,
-  type Slot,
-  type Style,
-  type Thread,
-} from "../../shared/types";
+import { FORMAT_LABEL, type Format, type GeneratedImage, type Style, type Thread } from "../../shared/types";
 import { call } from "../lib/rpc";
 import { mediaUrl } from "../lib/media";
 import { cx, errorMessage, notify } from "./ui";
@@ -33,38 +24,39 @@ export function Composer({
   onSent: () => void;
   onOpenSettings: () => void;
 }) {
-  const bySlot = new Map(styles.map((s) => [s.slot, s]));
-  const initialSlot = (): Slot | null => {
-    if (thread.lastSlot && bySlot.has(thread.lastSlot)) return thread.lastSlot;
-    return styles[0]?.slot ?? null;
+  const byId = new Map(styles.map((s) => [s.id, s]));
+  const initialStyle = (): string | null => {
+    if (thread.lastStyleId && byId.has(thread.lastStyleId)) return thread.lastStyleId;
+    return styles[0]?.id ?? null;
   };
-  const [slot, setSlot] = useState<Slot | null>(initialSlot);
+  const [styleId, setStyleId] = useState<string | null>(initialStyle);
   const [text, setText] = useState("");
   const [format, setFormat] = useState<Format | null>(null);
   const [variants, setVariants] = useState<1 | 2 | 4>(1);
   const [sending, setSending] = useState(false);
   const input = useRef<HTMLTextAreaElement>(null);
 
-  // Il primo stile creato diventa quello attivo; uno stile svuotato non resta selezionato.
-  const styleSlots = styles.map((s) => s.slot).join(",");
+  // Il primo stile del progetto diventa quello attivo; uno stile tolto non resta selezionato.
+  const styleIds = styles.map((s) => s.id).join(",");
   useEffect(() => {
-    setSlot((current) => {
-      if (current && bySlot.has(current)) return current;
-      return styles[0]?.slot ?? null;
+    setStyleId((current) => {
+      if (current && byId.has(current)) return current;
+      if (current === null && styles.length > 1) return null;
+      return styles.at(-1)?.id ?? null;
     });
     // eslint-disable-next-line react/exhaustive-deps
-  }, [styleSlots]);
+  }, [styleIds]);
 
   // Rispondendo a un'immagine si propone il suo stile.
   useEffect(() => {
     if (!replyTo) return;
     const style = styles.find((s) => s.id === replyTo.styleId);
-    if (style) setSlot(style.slot);
+    if (style) setStyleId(style.id);
     input.current?.focus();
     // eslint-disable-next-line react/exhaustive-deps
   }, [replyTo]);
 
-  const active = slot ? bySlot.get(slot) : undefined;
+  const active = styleId ? byId.get(styleId) : undefined;
   const color = active?.color ?? "#d3c7b7";
   const defaultFormat = active?.params.format ?? "landscape";
 
@@ -79,7 +71,7 @@ export function Composer({
       await call("messagesSend", {
         threadId: thread.id,
         text,
-        slot: active ? slot : null,
+        styleId: active?.id ?? null,
         format,
         variants,
         parentImageId: replyTo?.id ?? null,
@@ -98,44 +90,38 @@ export function Composer({
     <div className="border-t border-line bg-paper px-6 pt-3 pb-4">
       <div className="mx-auto max-w-[900px]">
         <div role="radiogroup" aria-label="Stile" className="mb-2 flex flex-wrap items-center gap-1.5">
-          {SLOTS.map((s) => {
-            const style = bySlot.get(s);
-            const selected = slot === s && Boolean(style);
+          {styles.map((style) => {
+            const selected = active?.id === style.id;
             return (
               <button
-                key={s}
+                key={style.id}
                 type="button"
                 role="radio"
                 aria-checked={selected}
-                disabled={!style}
-                onClick={() => setSlot(s)}
-                title={style ? `Stile ${SLOT_LETTER[s]}: ${style.name}` : `Slot ${SLOT_LETTER[s]} vuoto`}
+                onClick={() => setStyleId(style.id)}
+                title={`Stile: ${style.name}`}
                 className={cx(
                   "flex h-8 items-center gap-2 rounded-full border px-3 text-[13px] font-medium transition-all",
-                  !style && "border-dashed border-line-2 text-ink-3",
-                  style && !selected && "border-line-2 bg-card text-ink-2 hover:border-current",
+                  !selected && "border-line-2 bg-card text-ink-2 hover:border-current",
                   selected && "text-white shadow-card",
                 )}
                 style={
-                  style
-                    ? selected
-                      ? { background: style.color, borderColor: style.color }
-                      : { color: style.color }
-                    : undefined
+                  selected ? { background: style.color, borderColor: style.color } : { color: style.color }
                 }
               >
-                <span className="font-semibold">{SLOT_LETTER[s]}</span>
-                {style && (
-                  <span className={cx("max-w-36 truncate", !selected && "text-ink-2")}>{style.name}</span>
-                )}
+                <span
+                  className="size-2.5 shrink-0 rounded-full"
+                  style={{ background: selected ? "white" : style.color }}
+                />
+                <span className={cx("max-w-40 truncate", !selected && "text-ink-2")}>{style.name}</span>
               </button>
             );
           })}
           <button
             type="button"
             role="radio"
-            aria-checked={slot === null || !active}
-            onClick={() => setSlot(null)}
+            aria-checked={!active}
+            onClick={() => setStyleId(null)}
             className={cx(
               "flex h-8 items-center rounded-full border px-3 text-[13px] transition-colors",
               !active

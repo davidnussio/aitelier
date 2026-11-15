@@ -9,8 +9,9 @@ import {
   Pencil,
   RefreshCw,
   Anchor,
+  Plus,
 } from "lucide-react";
-import { SLOT_LETTER, SLOTS, type GeneratedImage, type Message, type Style } from "../../shared/types";
+import type { GeneratedImage, Message, Style } from "../../shared/types";
 import { call } from "../lib/rpc";
 import { mediaUrl } from "../lib/media";
 import { formatTime, formatUsd } from "../lib/format";
@@ -63,7 +64,7 @@ export function MessageItem({
       {message.kind === "trial" && (
         <p className="text-[13px] text-ink-2">
           {trialStyle && trialStyle.refs.length === 0
-            ? `Scegli la prova che ti piace di più: diventa l'àncora dello stile ${SLOT_LETTER[trialStyle.slot]}.`
+            ? `Scegli la prova che ti piace di più: diventa l'àncora dello stile «${trialStyle.name}».`
             : "Prove dello stile."}
         </p>
       )}
@@ -175,8 +176,8 @@ function ImageCard({
             variant="primary"
             onClick={() =>
               void run(
-                () => call("stylesUseImage", { imageId: image.id, slot: trialStyle.slot }),
-                `Àncora aggiunta allo stile ${SLOT_LETTER[trialStyle.slot]}. Sto ricavando la descrizione dello stile…`,
+                () => call("stylesUseImage", { imageId: image.id, styleId: trialStyle.id }),
+                `Àncora aggiunta a «${trialStyle.name}». Sto ricavando la descrizione dello stile…`,
               )
             }
           >
@@ -217,37 +218,39 @@ function ImageCard({
               <p className="px-2.5 pt-1 pb-1 text-[11px] font-semibold tracking-wide text-ink-3 uppercase">
                 Usa come stile
               </p>
-              {SLOTS.map((slot) => {
-                const style = styles.find((s) => s.slot === slot);
-                const full = style && (style.locked || style.refs.length >= MAX_REFS);
+              {styles.map((style) => {
+                const full = style.locked || style.refs.length >= MAX_REFS;
                 return (
                   <MenuItem
-                    key={slot}
-                    disabled={Boolean(full)}
-                    hint={full ? (style?.locked ? "Stile bloccato" : "Ha già 3 riferimenti") : undefined}
+                    key={style.id}
+                    disabled={full}
+                    hint={full ? (style.locked ? "Stile bloccato" : "Ha già 3 riferimenti") : undefined}
                     onClick={() => {
                       close();
                       void run(
-                        () => call("stylesUseImage", { imageId: image.id, slot }),
-                        style
-                          ? `Aggiunta come riferimento dello stile ${SLOT_LETTER[slot]}.`
-                          : `Nuovo stile ${SLOT_LETTER[slot]} creato da questa immagine.`,
+                        () => call("stylesUseImage", { imageId: image.id, styleId: style.id }),
+                        `Aggiunta come riferimento di «${style.name}».`,
                       );
                     }}
                   >
-                    <Palette size={15} style={{ color: style?.color }} />
-                    {style ? (
-                      <span>
-                        Riferimento per <b>{SLOT_LETTER[slot]}</b> · {style.name}
-                      </span>
-                    ) : (
-                      <span>
-                        Nuovo stile nello slot <b>{SLOT_LETTER[slot]}</b>
-                      </span>
-                    )}
+                    <Palette size={15} style={{ color: style.color }} />
+                    <span>
+                      Riferimento per <b>{style.name}</b>
+                    </span>
                   </MenuItem>
                 );
               })}
+              <MenuItem
+                onClick={() => {
+                  close();
+                  void run(
+                    () => call("stylesUseImage", { imageId: image.id, styleId: null }),
+                    "Nuovo stile creato da questa immagine e aggiunto al progetto. Sto ricavando la descrizione…",
+                  );
+                }}
+              >
+                <Plus size={15} /> Nuovo stile da questa immagine
+              </MenuItem>
               <div className="my-1 border-t border-line" />
               {canAnchor && (
                 <>

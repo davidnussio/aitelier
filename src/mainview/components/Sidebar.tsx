@@ -1,4 +1,4 @@
-import { Plus, Settings as SettingsIcon } from "lucide-react";
+import { Palette, Plus, Settings as SettingsIcon } from "lucide-react";
 import type { Settings, ThreadSummary } from "../../shared/types";
 import { formatUsd } from "../lib/format";
 import { Button, IconButton, cx } from "./ui";
@@ -10,6 +10,9 @@ export function Sidebar({
   onSelect,
   onNew,
   onSettings,
+  styleCount,
+  stylesActive,
+  onStyles,
 }: {
   threads: ThreadSummary[];
   currentId: string | null;
@@ -17,6 +20,9 @@ export function Sidebar({
   onSelect: (id: string) => void;
   onNew: () => void;
   onSettings: () => void;
+  styleCount: number;
+  stylesActive: boolean;
+  onStyles: () => void;
 }) {
   return (
     <aside className="flex min-h-0 flex-col bg-paper-2/60">
@@ -36,6 +42,23 @@ export function Sidebar({
         </Button>
       </div>
 
+      <div className="px-2 pb-2">
+        <button
+          type="button"
+          onClick={onStyles}
+          aria-current={stylesActive ? "page" : undefined}
+          className={cx(
+            "flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-[13.5px] font-medium transition-colors",
+            stylesActive ? "bg-card shadow-card" : "hover:bg-card/60",
+          )}
+        >
+          <Palette size={16} className="text-accent" />
+          <span className="flex-1">Stili</span>
+          <span className="text-xs font-normal text-ink-3">{styleCount}</span>
+        </button>
+      </div>
+
+      <p className="px-5 pt-1 pb-1 text-[11px] font-semibold tracking-wide text-ink-3 uppercase">Progetti</p>
       <nav aria-label="Progetti" className="min-h-0 flex-1 overflow-y-auto px-2 pb-2">
         {threads.length === 0 && <p className="px-3 py-4 text-[13px] text-ink-3">Nessun progetto per ora.</p>}
         {threads.map((t) => (

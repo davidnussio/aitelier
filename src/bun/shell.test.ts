@@ -9,6 +9,8 @@ import { maskKey } from "./secrets";
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), "bottega-media-"));
 fs.mkdirSync(path.join(dir, "images", "t1"), { recursive: true });
 fs.writeFileSync(path.join(dir, "images", "t1", "a.png"), "png");
+fs.mkdirSync(path.join(dir, "styles", "s1", "prove"), { recursive: true });
+fs.writeFileSync(path.join(dir, "styles", "s1", "prove", "p1.webp"), "webp");
 fs.writeFileSync(path.join(dir, "app.db"), "db");
 fs.writeFileSync(path.join(dir, "secrets.json"), "{}");
 const server = startMediaServer(dir);
@@ -18,6 +20,7 @@ test("serve solo immagini della cartella dati e solo con il token", async () => 
   const ok = await fetch(`${server.url}/f/images/t1/a.png?t=${server.token}`);
   expect(ok.status).toBe(200);
   expect(ok.headers.get("content-type")).toBe("image/png");
+  expect((await fetch(`${server.url}/f/styles/s1/prove/p1.webp?t=${server.token}`)).status).toBe(200);
   expect((await fetch(`${server.url}/f/images/t1/a.png?t=sbagliato`)).status).toBe(401);
   expect((await fetch(`${server.url}/f/app.db?t=${server.token}`)).status).toBe(404);
   expect((await fetch(`${server.url}/f/secrets.json?t=${server.token}`)).status).toBe(404);

@@ -46,3 +46,15 @@ export function createLogger(dir: string) {
     error: (message: string, error?: unknown) => write("ERROR", message, error),
   };
 }
+
+/** Le ultime righe del registro (già oscurate), per la finestra «Registro». */
+export function readLogTail(file: string, maxLines = 400): string {
+  try {
+    const previous = fs.existsSync(`${file}.1`) ? fs.readFileSync(`${file}.1`, "utf8") : "";
+    const current = fs.existsSync(file) ? fs.readFileSync(file, "utf8") : "";
+    const lines = (previous + current).split("\n").filter(Boolean);
+    return redact(lines.slice(-maxLines).join("\n"));
+  } catch {
+    return "";
+  }
+}

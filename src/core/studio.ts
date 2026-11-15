@@ -8,7 +8,6 @@ import {
   DEFAULT_STYLE_PARAMS,
   FORMAT_SIZE,
   INFOGRAPHIC_STYLE_PARAMS,
-  SLOT_LETTER,
   STYLE_COLORS,
   type EditableSettings,
   type GeneratedImage,
@@ -18,7 +17,6 @@ import {
   type MessageOptions,
   type NewStyleInput,
   type SendRequest,
-  type Slot,
   type Style,
   type StyleDescription,
   type StyleLabel,
@@ -61,6 +59,8 @@ export interface StudioDeps {
   concurrency?: number;
   sleep?: (ms: number) => Promise<void>;
   log?: (message: string, error?: unknown) => void;
+  /** Eventi normali (lavori iniziati e finiti) per il registro. */
+  info?: (message: string) => void;
 }
 
 interface ImageJob {
@@ -83,6 +83,7 @@ export class Studio {
   readonly #emit: (event: JobEvent) => void;
   readonly #sleep?: (ms: number) => Promise<void>;
   readonly #log: (message: string, error?: unknown) => void;
+  readonly #info: (message: string) => void;
 
   constructor(deps: StudioDeps) {
     this.db = deps.db;
@@ -91,6 +92,7 @@ export class Studio {
     this.#emit = deps.emit;
     this.#sleep = deps.sleep;
     this.#log = deps.log ?? (() => {});
+    this.#info = deps.info ?? (() => {});
     this.queue = new JobQueue(deps.concurrency ?? 2);
   }
 
@@ -157,12 +159,11 @@ export class Studio {
     return this.#thread(id);
   }
 
+  /** Gli stili restano nella libreria: servono anche ad altri progetti. */
   deleteThread(id: string): void {
-    const styles = this.db.listStyles(id);
     this.db.deleteThread(id);
     this.files.removeDir(`images/${id}`);
     this.files.removeDir(`thumbs/${id}`);
-    for (const s of styles) this.files.removeDir(`styles/${s.id}`);
   }
 
   getThread(id: string): ThreadDetail {
@@ -185,46 +186,49 @@ export class Studio {
     if (style.locked) throw new AppError(`Lo stile «${style.name}» è bloccato. Sbloccalo per modificarlo.`);
   }
 
-  #freeSlot(threadId: string, slot: Slot): void {
-    const existing = this.db.getStyleBySlot(threadId, slot);
-    if (existing) {
-      throw new AppError(
-        `Lo slot ${SLOT_LETTER[slot]} è già occupato da «${existing.name}». Svuotalo prima, oppure apri un nuovo progetto.`,
-      );
-    }
+  // --- Stili (libreria globale, senza limite di numero) ---
+
+  listStyles(): Style[] {
+    return this.db.listAllStyles();
   }
 
-  // --- Stili ---
-
-  #newStyle(threadId: string, slot: Slot, input: Partial<NewStyleInput>, brief: string): Style {
-    this.#thread(threadId);
-    this.#freeSlot(threadId, slot);
+  #newStyle(input: Partial<NewStyleInput>, brief: string, threadId: string | null): Style {
+    if (threadId) this.#thread(threadId);
     const kind = input.kind ?? "illustrazione";
     const params: StyleParams =
       kind === "infografica" ? { ...INFOGRAPHIC_STYLE_PARAMS } : { ...DEFAULT_STYLE_PARAMS };
-    return this.db.createStyle({
-      threadId,
-      slot,
-      name: input.name?.trim() || `Stile ${SLOT_LETTER[slot]}`,
-      color: input.color || STYLE_COLORS[slot - 1]!,
+    const count = this.db.listAllStyles().length;
+    const style = this.db.createStyle({
+      name: input.name?.trim() || (kind === "infografica" ? "Infografiche" : `Stile ${count + 1}`),
+      color: input.color || STYLE_COLORS[count % STYLE_COLORS.length]!,
       brief: brief.trim(),
       params,
     });
+    if (threadId) this.db.attachStyle(threadId, style.id);
+    return style;
   }
 
-  /** Stile da descrizione: lo crea e chiede 3 prove; l'utente sceglie l'àncora in chat. */
+  /**
+   * Stile da descrizione con 3 prove. Dentro un progetto le prove arrivano
+   * nella sua chat; dalla libreria (`threadId` null) stanno nella scheda dello
+   * stile.
+   */
   createStyleFromBrief(
-    threadId: string,
-    slot: Slot,
+    threadId: string | null,
     input: NewStyleInput,
     brief: string,
-  ): { style: Style; messageId: string } {
+  ): { style: Style; messageId: string | null } {
     if (!brief.trim())
       throw new AppError(
         "Descrivi lo stile in poche parole, per esempio «acquerello morbido, colori pastello».",
       );
+    if (!threadId) {
+      const style = this.#newStyle(input, brief, null);
+      this.#enqueueTrials(style);
+      return { style: this.#style(style.id), messageId: null };
+    }
     const thread = this.#thread(threadId);
-    const style = this.#newStyle(threadId, slot, input, brief);
+    const style = this.#newStyle(input, brief, threadId);
     const size = FORMAT_SIZE[style.params.format];
     const prompt = trialPrompt(brief, style.params.kind, thread.contextNotes, thread.textLanguage);
     const { messageId } = this.#enqueue({
@@ -249,13 +253,124 @@ export class Studio {
     return { style, messageId };
   }
 
+  /** Altre prove per uno stile della libreria, dalla stessa descrizione. */
+  generateTrials(styleId: string): Style {
+    const style = this.#style(styleId);
+    this.#unlocked(style);
+    if (!style.brief.trim()) {
+      throw new AppError(
+        "Questo stile non ha una descrizione da cui partire: aggiungi un'immagine di riferimento.",
+      );
+    }
+    this.#enqueueTrials(style);
+    return this.#style(styleId);
+  }
+
+  /** La prova scelta diventa un'immagine di riferimento (àncora) dello stile. */
+  async useTrialAsAnchor(trialId: string): Promise<Style> {
+    const trial = this.db.getTrial(trialId);
+    if (!trial?.path || trial.status !== "done") throw new AppError("La prova non è ancora pronta.");
+    const style = this.#style(trial.styleId);
+    this.#unlocked(style);
+    if (style.refs.length >= MAX_REFS) {
+      throw new AppError(
+        `Lo stile «${style.name}» ha già ${MAX_REFS} immagini di riferimento. Togline una prima.`,
+      );
+    }
+    await this.#addRef(style.id, await this.files.read(trial.path));
+    this.db.touchStyle(style.id);
+    if (!style.description) this.#describe(style.id);
+    return this.#style(style.id);
+  }
+
+  deleteTrial(trialId: string): Style {
+    const trial = this.db.getTrial(trialId);
+    if (!trial) throw new AppError("Prova non trovata.");
+    if (trial.status === "queued" || trial.status === "running") {
+      throw new AppError("Questa prova è ancora in preparazione.");
+    }
+    this.db.deleteTrial(trialId);
+    if (trial.path) this.files.remove(trial.path);
+    if (trial.thumbPath) this.files.remove(trial.thumbPath);
+    return this.#style(trial.styleId);
+  }
+
+  #enqueueTrials(style: Style): void {
+    const settings = this.settings();
+    const size = FORMAT_SIZE[style.params.format];
+    const prompt = trialPrompt(style.brief, style.params.kind, "", settings.textLanguage);
+    const model = settings.imageModel;
+    const ids = Array.from({ length: TRIAL_VARIANTS }, () => this.db.createTrial(style.id, size, model));
+    for (const trialId of ids) {
+      this.#emit({ threadId: null, kind: "trial", status: "queued", styleId: style.id, trialId });
+    }
+    this.queue.push(async () => {
+      for (const trialId of ids) {
+        this.db.setTrialStatus(trialId, "running");
+        this.#emit({ threadId: null, kind: "trial", status: "running", styleId: style.id, trialId });
+      }
+      this.#info(`Prove dello stile «${style.name}»: ${model}, ${size}, ${ids.length} varianti`);
+      const fail = (error: UserError) => {
+        for (const trialId of ids) {
+          if (this.db.getTrial(trialId)?.status === "done") continue;
+          this.db.setTrialStatus(trialId, "failed", error);
+          this.#emit({ threadId: null, kind: "trial", status: "failed", styleId: style.id, trialId, error });
+        }
+      };
+      let result: ProviderResult;
+      try {
+        result = await withRetry(
+          () =>
+            this.#provider.generate({
+              model,
+              prompt,
+              size,
+              quality: "low",
+              background: "auto",
+              n: ids.length,
+            }),
+          { sleep: this.#sleep },
+        );
+      } catch (error) {
+        if (!(error instanceof ProviderError)) this.#log("Prove dello stile non riuscite", error);
+        fail(toUserError(error));
+        return;
+      }
+      const cost = estimateCostUsd(result.usage) / ids.length;
+      for (const [i, trialId] of ids.entries()) {
+        const bytes = result.images[i];
+        // Lo stile può essere stato eliminato nel frattempo.
+        if (!bytes || !this.db.getTrial(trialId)) continue;
+        try {
+          const saved = await this.files.saveTrial(style.id, trialId, bytes);
+          this.db.completeTrial(trialId, {
+            ...saved,
+            inputTokens: Math.round(
+              (result.usage.inputTextTokens + result.usage.inputImageTokens) / ids.length,
+            ),
+            outputTokens: Math.round(result.usage.outputTokens / ids.length),
+            costUsd: Math.round(cost * 10_000) / 10_000,
+          });
+          this.#emit({ threadId: null, kind: "trial", status: "done", styleId: style.id, trialId });
+        } catch (error) {
+          this.#log("Salvataggio della prova non riuscito", error);
+        }
+      }
+      fail({
+        title: "Prova mancante",
+        detail: "OpenAI ha restituito meno prove di quelle chieste.",
+        action: "Premi «Altre 3 prove».",
+      });
+    });
+  }
+
+  /** Stile da un'immagine del computer; `threadId` lo aggiunge anche a un progetto. */
   async createStyleFromFile(
-    threadId: string,
-    slot: Slot,
+    threadId: string | null,
     input: NewStyleInput,
     bytes: Uint8Array,
   ): Promise<Style> {
-    const style = this.#newStyle(threadId, slot, input, "");
+    const style = this.#newStyle(input, "", threadId);
     try {
       await this.#addRef(style.id, bytes);
     } catch (error) {
@@ -266,30 +381,69 @@ export class Studio {
     return this.#style(style.id);
   }
 
-  /** «Usa come stile»: nuova àncora di uno stile esistente o primo riferimento di uno nuovo. */
-  async useImageAsStyle(imageId: string, slot: Slot, input?: Partial<NewStyleInput>): Promise<Style> {
+  /**
+   * «Usa come stile»: l'immagine diventa un riferimento di uno stile esistente
+   * (`styleId`) oppure il primo riferimento di uno stile nuovo, aggiunto al
+   * progetto dell'immagine.
+   */
+  async useImageAsStyle(
+    imageId: string,
+    styleId: string | null,
+    input?: Partial<NewStyleInput>,
+  ): Promise<Style> {
     const image = this.db.getImage(imageId);
     if (!image?.path || image.status !== "done") throw new AppError("L'immagine non è ancora pronta.");
     const bytes = await this.files.read(image.path);
-    let style = this.db.getStyleBySlot(image.threadId, slot);
-    if (!style) {
+    let style: Style;
+    if (styleId) {
+      style = this.#style(styleId);
+      this.#unlocked(style);
+      if (style.refs.length >= MAX_REFS) {
+        throw new AppError(
+          `Lo stile «${style.name}» ha già ${MAX_REFS} immagini di riferimento. Togline una prima.`,
+        );
+      }
+      this.db.attachStyle(image.threadId, style.id);
+    } else {
       const message = this.db.getMessage(image.messageId);
-      style = this.#newStyle(
-        image.threadId,
-        slot,
-        input ?? {},
-        message?.kind === "trial" ? message.text : "",
-      );
-    }
-    this.#unlocked(style);
-    if (style.refs.length >= MAX_REFS) {
-      throw new AppError(
-        `Lo stile «${style.name}» ha già ${MAX_REFS} immagini di riferimento. Togline una prima.`,
-      );
+      style = this.#newStyle(input ?? {}, message?.kind === "trial" ? message.text : "", image.threadId);
     }
     await this.#addRef(style.id, bytes);
+    this.db.touchStyle(style.id);
     if (!style.description) this.#describe(style.id);
     return this.#style(style.id);
+  }
+
+  /** Aggiunge al progetto uno stile della libreria (lo stesso, non una copia). */
+  attachStyle(threadId: string, styleId: string): Style {
+    this.#thread(threadId);
+    this.#style(styleId);
+    this.db.attachStyle(threadId, styleId);
+    this.db.touchThread(threadId);
+    return this.#style(styleId);
+  }
+
+  /** Toglie lo stile dal progetto; resta nella libreria. */
+  detachStyle(threadId: string, styleId: string): void {
+    this.db.detachStyle(threadId, styleId);
+    this.db.touchThread(threadId);
+  }
+
+  /** Copia indipendente: modificarla non tocca l'originale. */
+  async duplicateStyle(styleId: string, threadId: string | null = null): Promise<Style> {
+    const original = this.#style(styleId);
+    const copy = this.db.createStyle({
+      name: `${original.name} (copia)`,
+      color: original.color,
+      brief: original.brief,
+      params: { ...original.params },
+    });
+    this.db.updateStyle(copy.id, { description: original.description });
+    for (const ref of original.refs) {
+      if (this.files.exists(ref.path)) await this.#addRef(copy.id, await this.files.read(ref.path));
+    }
+    if (threadId) this.db.attachStyle(threadId, copy.id);
+    return this.#style(copy.id);
   }
 
   async addRefFromFile(styleId: string, bytes: Uint8Array): Promise<Style> {
@@ -322,8 +476,8 @@ export class Studio {
     if (!ref) throw new AppError("Riferimento non trovato.");
     const style = this.#style(ref.styleId);
     this.#unlocked(style);
+    // Il file resta: le immagini già fatte lo usano per «Rigenera».
     this.db.deleteRef(refId);
-    this.files.remove(ref.path);
     return this.#style(style.id);
   }
 
@@ -342,10 +496,12 @@ export class Studio {
     if (!onlyLockChange) this.#unlocked(style);
     if (patch.name !== undefined) patch.name = patch.name.trim() || style.name;
     this.db.updateStyle(styleId, patch);
+    this.db.touchStyle(styleId);
     return this.#style(styleId);
   }
 
-  clearStyle(styleId: string): void {
+  /** Elimina lo stile dalla libreria e da tutti i progetti. */
+  deleteStyle(styleId: string): void {
     const style = this.#style(styleId);
     this.#unlocked(style);
     this.db.deleteStyle(styleId);
@@ -362,13 +518,13 @@ export class Studio {
   }
 
   #describe(styleId: string): void {
-    const style = this.#style(styleId);
+    this.#style(styleId);
     this.db.updateStyle(styleId, { describing: true, describeError: null });
-    this.#emit({ threadId: style.threadId, kind: "describe", status: "queued", styleId });
+    this.#emit({ threadId: null, kind: "describe", status: "queued", styleId });
     this.queue.push(async () => {
       const current = this.db.getStyle(styleId);
       if (!current) return;
-      this.#emit({ threadId: current.threadId, kind: "describe", status: "running", styleId });
+      this.#emit({ threadId: null, kind: "describe", status: "running", styleId });
       try {
         const images = await Promise.all(current.refs.map((r) => this.files.input(r.path)));
         const description = await withRetry(
@@ -383,14 +539,15 @@ export class Studio {
         );
         if (!this.db.getStyle(styleId)) return;
         this.db.updateStyle(styleId, { description, describing: false, describeError: null });
-        this.#emit({ threadId: current.threadId, kind: "describe", status: "done", styleId });
+        this.#info(`Descrizione dello stile «${current.name}» pronta`);
+        this.#emit({ threadId: null, kind: "describe", status: "done", styleId });
       } catch (error) {
         this.#log("Descrizione dello stile non riuscita", error);
         const userError = toUserError(error);
         if (this.db.getStyle(styleId))
           this.db.updateStyle(styleId, { describing: false, describeError: userError });
         this.#emit({
-          threadId: current.threadId,
+          threadId: null,
           kind: "describe",
           status: "failed",
           styleId,
@@ -403,7 +560,7 @@ export class Studio {
   // --- Generazione ---
 
   #label(style: Style | null): StyleLabel | null {
-    return style ? { slot: style.slot, name: style.name, color: style.color } : null;
+    return style ? { name: style.name, color: style.color } : null;
   }
 
   /** Invia una richiesta: crea il messaggio, mette in coda il lavoro, risponde subito. */
@@ -411,9 +568,8 @@ export class Studio {
     const thread = this.#thread(req.threadId);
     const text = req.text.trim();
     if (!text) throw new AppError("Scrivi cosa vuoi nell'immagine.");
-    const style = req.slot ? this.db.getStyleBySlot(thread.id, req.slot) : null;
-    if (req.slot && !style)
-      throw new AppError(`Lo slot ${SLOT_LETTER[req.slot]} è vuoto. Crea prima lo stile.`);
+    const style = req.styleId ? this.db.getStyle(req.styleId) : null;
+    if (req.styleId && !style) throw new AppError("Questo stile non esiste più. Scegline un altro.");
     if (style?.describing && !style.description && style.refs.length === 0) {
       throw new AppError(`Lo stile «${style.name}» non è ancora pronto.`);
     }
@@ -422,7 +578,11 @@ export class Studio {
     if (req.parentImageId && (!parent?.path || parent.status !== "done")) {
       throw new AppError("L'immagine da modificare non è disponibile.");
     }
-    this.db.updateThread(thread.id, { lastSlot: req.slot });
+    if (style) {
+      this.db.attachStyle(thread.id, style.id);
+      this.db.touchStyle(style.id);
+    }
+    this.db.updateThread(thread.id, { lastStyleId: style?.id ?? null });
 
     const params = style?.params ?? DEFAULT_STYLE_PARAMS;
     const format = req.format ?? params.format;
@@ -552,6 +712,10 @@ export class Studio {
       this.#emit({ threadId: job.threadId, kind: "image", status: "running", imageId });
     }
     let result: ProviderResult;
+    const started = Date.now();
+    this.#info(
+      `Generazione: ${job.endpoint}, ${job.model}, ${job.size}, qualità ${job.quality}, ${job.imageIds.length} varianti, ${job.inputPaths.length} immagini di input`,
+    );
     try {
       const images = await Promise.all(job.inputPaths.map((p) => this.files.input(p)));
       const base = {
@@ -570,12 +734,21 @@ export class Studio {
         { sleep: this.#sleep },
       );
     } catch (error) {
-      if (!(error instanceof ProviderError)) this.#log("Generazione non riuscita", error);
+      if (error instanceof ProviderError) {
+        this.#info(
+          `Generazione non riuscita: ${error.userError.title} (HTTP ${error.status ?? "-"}) ${error.message}`,
+        );
+      } else {
+        this.#log("Generazione non riuscita", error);
+      }
       this.#failAll(job, toUserError(error));
       return;
     }
 
     const n = job.imageIds.length;
+    this.#info(
+      `Generazione riuscita in ${Math.round((Date.now() - started) / 1000)} s: ${result.images.length} immagini, token ${result.usage.inputTextTokens}+${result.usage.inputImageTokens} in, ${result.usage.outputTokens} out, ${estimateCostUsd(result.usage)} USD`,
+    );
     const share = (value: number) => Math.round(value / n);
     const cost = estimateCostUsd(result.usage) / n;
     for (const [i, imageId] of job.imageIds.entries()) {

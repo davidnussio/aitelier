@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { PanelRightClose, PanelRightOpen } from "lucide-react";
-import type { Settings, ThreadDetail, ThreadSummary } from "../shared/types";
+import type { Settings, Style, ThreadDetail, ThreadSummary } from "../shared/types";
 import { call, onJobUpdate } from "./lib/rpc";
 import { setAppInfo } from "./lib/media";
 import { Sidebar } from "./components/Sidebar";
 import { ThreadView } from "./components/ThreadView";
 import { StylePanel } from "./components/StylePanel";
+import { StyleLibrary } from "./components/StyleLibrary";
 import { SettingsDialog } from "./components/SettingsDialog";
 import { NewThreadDialog } from "./components/NewThreadDialog";
 import { Button, IconButton, Toaster, errorMessage, notify } from "./components/ui";
@@ -19,14 +20,25 @@ export function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [newThreadOpen, setNewThreadOpen] = useState(false);
   const [panelOpen, setPanelOpen] = useState(true);
+  const [view, setView] = useState<"thread" | "styles">("thread");
+  const [library, setLibrary] = useState<Style[]>([]);
   const currentRef = useRef<string | null>(null);
   useEffect(() => {
     currentRef.current = currentId;
   }, [currentId]);
 
   const select = useCallback((id: string | null) => {
-    setDetail(null);
+    setView("thread");
+    setDetail((current) => (current?.thread.id === id ? current : null));
     setCurrentId(id);
+  }, []);
+
+  const refreshLibrary = useCallback(async () => {
+    try {
+      setLibrary(await call("stylesList", {}));
+    } catch (e) {
+      notify(errorMessage(e));
+    }
   }, []);
 
   const refreshThreads = useCallback(async () => {
@@ -64,9 +76,14 @@ export function App() {
       try {
         const info = await call("appInfo", {});
         setAppInfo(info);
-        const [s, list] = await Promise.all([call("settingsGet", {}), call("threadsList", {})]);
+        const [s, list, styles] = await Promise.all([
+          call("settingsGet", {}),
+          call("threadsList", {}),
+          call("stylesList", {}),
+        ]);
         setSettings(s);
         setThreads(list);
+        setLibrary(styles);
         if (list[0]) select(list[0].id);
         if (!s.apiKey.set) setSettingsOpen(true);
       } catch (e) {
@@ -85,18 +102,28 @@ export function App() {
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout> | null = null;
     return onJobUpdate((event) => {
-      if (event.threadId === currentRef.current && !timer) {
+      const styleJob = event.threadId === null;
+      if ((styleJob || event.threadId === currentRef.current) && !timer) {
         timer = setTimeout(() => {
           timer = null;
           void reloadThread();
+          if (styleJob) void refreshLibrary();
         }, 120);
       }
       if (event.status === "done") {
         void refreshThreads();
         void refreshSettings();
+        void refreshLibrary();
       }
     });
-  }, [reloadThread, refreshThreads, refreshSettings]);
+  }, [reloadThread, refreshThreads, refreshSettings, refreshLibrary]);
+
+  /** Dopo una modifica: progetto aperto, elenco dei progetti e libreria degli stili. */
+  const refreshAll = useCallback(() => {
+    void reloadThread();
+    void refreshThreads();
+    void refreshLibrary();
+  }, [reloadThread, refreshThreads, refreshLibrary]);
 
   const createThread = async (title: string, contextNotes: string) => {
     try {
@@ -128,23 +155,28 @@ export function App() {
     <div className="grid h-full grid-cols-[256px_minmax(0,1fr)_auto] grid-rows-[minmax(0,1fr)] overflow-hidden">
       <Sidebar
         threads={threads}
-        currentId={currentId}
+        currentId={view === "thread" ? currentId : null}
         settings={settings}
+        styleCount={library.length}
+        stylesActive={view === "styles"}
+        onStyles={() => {
+          setView("styles");
+          void refreshLibrary();
+        }}
         onSelect={select}
         onNew={() => setNewThreadOpen(true)}
         onSettings={() => setSettingsOpen(true)}
       />
 
       <main className="relative flex min-w-0 flex-col border-x border-line bg-paper">
-        {detail ? (
+        {view === "styles" ? (
+          <StyleLibrary styles={library} threads={threads} onChanged={refreshAll} onOpenThread={select} />
+        ) : detail ? (
           <ThreadView
             key={detail.thread.id}
             detail={detail}
             canGenerate={canGenerate}
-            onChanged={() => {
-              void reloadThread();
-              void refreshThreads();
-            }}
+            onChanged={refreshAll}
             onDelete={() => void deleteThread(detail.thread.id)}
             onOpenSettings={() => setSettingsOpen(true)}
           />
@@ -155,7 +187,7 @@ export function App() {
             onSettings={() => setSettingsOpen(true)}
           />
         )}
-        {detail && (
+        {view === "thread" && detail && (
           <IconButton
             label={panelOpen ? "Nascondi gli stili" : "Mostra gli stili"}
             className="absolute top-3 right-3"
@@ -166,14 +198,8 @@ export function App() {
         )}
       </main>
 
-      {detail && panelOpen && (
-        <StylePanel
-          detail={detail}
-          onChanged={() => {
-            void reloadThread();
-            void refreshThreads();
-          }}
-        />
+      {view === "thread" && detail && panelOpen && (
+        <StylePanel detail={detail} library={library} onChanged={refreshAll} />
       )}
 
       {settingsOpen && settings && (
@@ -199,8 +225,8 @@ function Welcome({
       <div className="max-w-md text-center">
         <p className="font-serif text-3xl">Benvenuti in bottega</p>
         <p className="mt-3 text-ink-2">
-          Ogni progetto conserva fino a tre stili. Scegli lo stile, descrivi cosa vuoi, invia: le immagini di
-          oggi e quelle del mese prossimo sembreranno della stessa mano.
+          Gli stili si conservano in una libreria e servono a tutti i progetti. Scegli lo stile, descrivi cosa
+          vuoi, invia: le immagini di oggi e quelle del mese prossimo sembreranno della stessa mano.
         </p>
         <div className="mt-6 flex justify-center gap-2">
           {canGenerate ? (

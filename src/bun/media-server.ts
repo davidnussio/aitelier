@@ -8,7 +8,7 @@
 import { timingSafeEqual } from "node:crypto";
 import path from "node:path";
 
-const ALLOWED = /^(images|thumbs|styles)\/[\w-]+\/[\w-]+\.(png|webp)$/;
+const ALLOWED = /^((images|thumbs|styles)\/[\w-]+|styles\/[\w-]+\/prove)\/[\w-]+\.(png|webp)$/;
 
 const TYPES: Record<string, string> = { ".png": "image/png", ".webp": "image/webp" };
 

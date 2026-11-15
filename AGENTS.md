@@ -10,6 +10,10 @@ Leggi `README.md` per struttura e stato, `docs/spec.md` per la specifica.
   anche da `scripts/preview.ts`.
 - La chiave API non deve mai: finire nel database, nei log, nelle risposte RPC
   verso la webview. La webview vede solo `sk-...abcd`.
+- Gli stili sono globali (libreria) e collegati ai progetti da `thread_styles`.
+  Una modifica allo schema è una nuova voce in `MIGRATIONS` (`src/core/db.ts`)
+  con un test che parte dallo schema precedente; all'avvio l'app fa un backup
+  prima di migrare.
 - Testi dell'interfaccia e messaggi d'errore in italiano, con cosa fare dopo.
 - Prima di dire che una modifica dell'interfaccia funziona: `bun run preview`
   e controllo nel browser integrato (dati demo, nessuna chiave).

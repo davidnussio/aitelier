@@ -3,10 +3,6 @@
  * Nessun import da Electrobun: il core resta indipendente dal guscio desktop.
  */
 
-export type Slot = 1 | 2 | 3;
-export const SLOTS: readonly Slot[] = [1, 2, 3];
-export const SLOT_LETTER: Record<Slot, string> = { 1: "A", 2: "B", 3: "C" };
-
 export type Format = "square" | "landscape" | "portrait";
 export type Quality = "low" | "medium" | "high";
 export type StyleKind = "illustrazione" | "infografica";
@@ -79,6 +75,16 @@ export const INFOGRAPHIC_STYLE_PARAMS: StyleParams = {
   kind: "infografica",
 };
 
+export interface StyleTrial {
+  id: string;
+  styleId: string;
+  path: string | null;
+  thumbPath: string | null;
+  size: string;
+  status: ImageStatus;
+  error: UserError | null;
+}
+
 export interface StyleRef {
   id: string;
   /** Relativo alla cartella dati. */
@@ -86,10 +92,9 @@ export interface StyleRef {
   position: number;
 }
 
+/** Uno stile della libreria: lo stesso stile può servire a più progetti. */
 export interface Style {
   id: string;
-  threadId: string;
-  slot: Slot;
   name: string;
   color: string;
   /** Il testo con cui l'utente ha chiesto lo stile ("acquerello morbido…"). */
@@ -101,11 +106,15 @@ export interface Style {
   params: StyleParams;
   locked: boolean;
   refs: StyleRef[];
+  /** In quanti progetti è usato. */
+  projectCount: number;
+  /** Prove generate dalla descrizione, tra cui scegliere l'àncora (fuori da un progetto). */
+  trials: StyleTrial[];
+  updatedAt: string;
 }
 
-/** Fotografia dello stile al momento del messaggio: resta anche se lo slot cambia. */
+/** Fotografia dello stile al momento del messaggio: resta anche se lo stile cambia o sparisce. */
 export interface StyleLabel {
-  slot: Slot | null;
   name: string;
   color: string;
 }
@@ -118,7 +127,7 @@ export interface Thread {
   /** Modelli fissati alla creazione: un aggiornamento non cambia un progetto in corso. */
   imageModel: string;
   preciseModel: string;
-  lastSlot: Slot | null;
+  lastStyleId: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -224,18 +233,20 @@ export interface VerifyResult {
 }
 
 export interface JobEvent {
-  threadId: string;
-  kind: "image" | "describe";
+  /** null per i lavori sugli stili, che non appartengono a un progetto. */
+  threadId: string | null;
+  kind: "image" | "describe" | "trial";
   status: ImageStatus;
   imageId?: string;
   styleId?: string;
+  trialId?: string;
   error?: UserError;
 }
 
 export interface SendRequest {
   threadId: string;
   text: string;
-  slot: Slot | null;
+  styleId: string | null;
   format: Format | null;
   variants: 1 | 2 | 4;
   /** Presente quando si risponde a un'immagine: nasce una nuova versione. */
@@ -258,3 +269,28 @@ export const STYLE_COLORS = [
   "#1f8a8a",
   "#6b6b6b",
 ];
+
+export type BackupReason = "automatico" | "manuale" | "prima-della-migrazione" | "prima-del-ripristino";
+
+export const BACKUP_REASON_LABEL: Record<BackupReason, string> = {
+  automatico: "Automatico",
+  manuale: "Manuale",
+  "prima-della-migrazione": "Prima di un aggiornamento",
+  "prima-del-ripristino": "Prima di un ripristino",
+};
+
+export interface BackupInfo {
+  name: string;
+  createdAt: string;
+  reason: BackupReason;
+  threads: number;
+  styles: number;
+  images: number;
+}
+
+export interface BackupState {
+  folder: string;
+  backups: BackupInfo[];
+  /** Nome del backup da ripristinare al prossimo avvio. */
+  pendingRestore: string | null;
+}
