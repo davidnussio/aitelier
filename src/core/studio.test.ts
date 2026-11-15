@@ -280,6 +280,29 @@ describe("Studio", () => {
     expect(studio.useTrialAsAnchor(current.trials[2]!.id)).rejects.toThrow("bloccato");
   });
 
+  test("salvare un'immagine: nome proposto leggibile, copia nel percorso scelto", async () => {
+    const thread = studio.createThread({ title: "Festa di Natale: biglietto!" });
+    const { imageIds } = studio.send({
+      threadId: thread.id,
+      text: "Un pandoro",
+      styleId: null,
+      format: null,
+      variants: 1,
+    });
+    await studio.queue.idle();
+    const name = studio.exportFileName(imageIds[0]!);
+    expect(name).toMatch(/^Festa di Natale biglietto \d{4}-\d{2}-\d{2} \d{2}\.\d{2}\.png$/);
+    const created = new Date(studio.image(imageIds[0]!).createdAt);
+    expect(name).toContain(
+      `${String(created.getHours()).padStart(2, "0")}.${String(created.getMinutes()).padStart(2, "0")}`,
+    );
+    const target = path.join(dir, "fuori", "scelto.png");
+    studio.exportImage(imageIds[0]!, target);
+    expect(fs.readFileSync(target)).toEqual(
+      fs.readFileSync(path.join(dir, studio.image(imageIds[0]!).path!)),
+    );
+  });
+
   test("filtri e errori temporanei: nessun nuovo tentativo sul rifiuto, 2 sui temporanei", async () => {
     const { fromHttp } = await import("./errors");
     const thread = studio.createThread({ title: "Errori" });

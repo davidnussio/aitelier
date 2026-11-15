@@ -198,9 +198,12 @@ function ImageCard({
         )}
         <div className="flex-1" />
         <IconButton
-          label="Salva nella cartella Immagini"
+          label="Salva l'immagine…"
           onClick={() =>
-            void run(() => call("imagesExport", { imageId: image.id }), "Salvata in Immagini › Bottega.")
+            void run(async () => {
+              const saved = await call("imagesExport", { imageId: image.id });
+              if (saved) notify(`Immagine salvata: ${saved.split("/").pop()}`, "info");
+            })
           }
         >
           <Download size={16} />

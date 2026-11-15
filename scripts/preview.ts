@@ -58,6 +58,8 @@ const handlers = createHandlers({
   demo: true,
   info: () => ({ version: pkg.version, mediaBase: media.url, mediaToken: media.token, demo: true, dataDir }),
   picturesDir: path.join(dataDir, "export"),
+  // Nel browser niente finestra di sistema: salva direttamente nella cartella di prova.
+  chooseSavePath: async (name, dir) => path.join(dir, name),
   // Niente finestra nativa nel browser: un'immagine demo al posto del file scelto.
   pickImage: async () => fakeImage(`STILE:\nimmagine caricata ${++picks}\n\n`, "1024x1024", picks),
   showItemInFolder: (p) => console.log("Mostra nel Finder:", p),

@@ -14,6 +14,7 @@ import { Studio } from "../core/studio";
 import type { BottegaRPC } from "../shared/rpc";
 import type { JobEvent } from "../shared/types";
 import { createHandlers } from "./handlers";
+import { chooseSavePath } from "./save-dialog";
 import { createLogger } from "./log";
 import { startMediaServer } from "./media-server";
 import { SecretStore } from "./secrets";
@@ -93,6 +94,19 @@ const rpc = BrowserView.defineRPC<BottegaRPC>({
       demo,
       info: () => ({ version: pkg.version, mediaBase: media.url, mediaToken: media.token, demo, dataDir }),
       picturesDir: Utils.paths.pictures,
+      chooseSavePath: (name, dir) =>
+        chooseSavePath(name, dir, {
+          platform: process.platform,
+          chooseFolder: async (startingFolder) => {
+            const [folder] = await Utils.openFileDialog({
+              startingFolder,
+              canChooseFiles: false,
+              canChooseDirectory: true,
+              allowsMultipleSelection: false,
+            });
+            return folder ?? null;
+          },
+        }),
       pickImage,
       showItemInFolder: (p) => Utils.showItemInFolder(p),
       openExternal: (url) => Utils.openExternal(url),

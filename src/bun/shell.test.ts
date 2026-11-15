@@ -31,3 +31,22 @@ test("la chiave non finisce mai in chiaro nei log né nella webview", () => {
   expect(redact("errore con sk-proj-abcdefghijklmnop123")).toBe("errore con sk-***");
   expect(maskKey("sk-proj-abcdefghijklmnop1234")).toBe("sk-...1234");
 });
+
+test("finestra «Salva»: testo AppleScript sicuro, estensione e ripiego fuori da macOS", async () => {
+  const { appleScriptString, chooseSavePath, saveDialogScript, withPngExtension } =
+    await import("./save-dialog");
+  expect(appleScriptString('Festa "di" Natale\\')).toBe('"Festa \\"di\\" Natale\\\\"');
+  const script = saveDialogScript("Vulcani 2026-11-15 10.30.png", "/Users/x/Pictures");
+  expect(script[1]).toContain('default name "Vulcani 2026-11-15 10.30.png"');
+  expect(script[1]).toContain('POSIX file "/Users/x/Pictures"');
+  expect(withPngExtension("/tmp/biglietto")).toBe("/tmp/biglietto.png");
+  expect(withPngExtension("/tmp/biglietto.PNG")).toBe("/tmp/biglietto.PNG");
+  const chosen = await chooseSavePath("a.png", "/start", {
+    platform: "linux",
+    chooseFolder: async (start) => `${start}/scelta`,
+  });
+  expect(chosen).toBe("/start/scelta/a.png");
+  expect(
+    await chooseSavePath("a.png", "/start", { platform: "win32", chooseFolder: async () => null }),
+  ).toBeNull();
+});

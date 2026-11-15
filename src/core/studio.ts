@@ -4,6 +4,7 @@
  * (src/bun) si limita a esporla via RPC.
  */
 import fs from "node:fs";
+import path from "node:path";
 import {
   DEFAULT_STYLE_PARAMS,
   FORMAT_SIZE,
@@ -50,6 +51,8 @@ const SETTING_KEYS: Record<keyof EditableSettings, string> = {
 
 export const MAX_REFS = 3;
 const TRIAL_VARIANTS = 3;
+
+const pad = (n: number) => String(n).padStart(2, "0");
 
 export interface StudioDeps {
   db: Db;
@@ -798,21 +801,28 @@ export class Studio {
     return image;
   }
 
-  /** Copia un'immagine in una cartella dell'utente con un nome leggibile. */
-  exportImage(imageId: string, targetDir: string): string {
+  /** Nome proposto nella finestra «Salva»: titolo del progetto e data dell'immagine. */
+  exportFileName(imageId: string): string {
     const image = this.image(imageId);
-    if (!image.path) throw new AppError("L'immagine non è ancora pronta.");
     const thread = this.#thread(image.threadId);
     const safe =
       thread.title
         .replace(/[^\p{L}\p{N} _-]+/gu, "")
         .trim()
         .slice(0, 60) || "bottega";
-    fs.mkdirSync(targetDir, { recursive: true });
-    const stamp = image.createdAt.slice(0, 19).replace(/[:T]/g, "-");
-    let target = `${targetDir}/${safe} ${stamp}.png`;
-    for (let i = 2; fs.existsSync(target); i++) target = `${targetDir}/${safe} ${stamp} (${i}).png`;
+    // Ora locale, non UTC: è quella che l'utente si aspetta di leggere.
+    const d = new Date(image.createdAt);
+    const stamp = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}.${pad(d.getMinutes())}`;
+    return `${safe} ${stamp}.png`;
+  }
+
+  /** Copia l'immagine nel percorso scelto dall'utente (sovrascrive: la finestra «Salva» ha già chiesto). */
+  exportImage(imageId: string, target: string): string {
+    const image = this.image(imageId);
+    if (!image.path) throw new AppError("L'immagine non è ancora pronta.");
+    fs.mkdirSync(path.dirname(target), { recursive: true });
     fs.copyFileSync(this.files.abs(image.path), target);
+    this.#info(`Immagine ${imageId} salvata in ${target}`);
     return target;
   }
 }

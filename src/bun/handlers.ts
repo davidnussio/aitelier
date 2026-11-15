@@ -34,7 +34,10 @@ export interface HandlerDeps {
   backups: Backups;
   demo: boolean;
   info: () => AppInfo;
+  /** Cartella proposta la prima volta nella finestra «Salva». */
   picturesDir: string;
+  /** Finestra «Salva»: percorso scelto, oppure null se l'utente annulla. */
+  chooseSavePath: (defaultName: string, defaultDir: string) => Promise<string | null>;
   pickImage: () => Promise<Uint8Array | null>;
   showItemInFolder: (absPath: string) => void;
   openExternal: (url: string) => void;
@@ -82,6 +85,9 @@ export function createHandlers(deps: HandlerDeps): Handlers {
       throw error;
     }
   }
+
+  // La finestra «Salva» riparte dall'ultima cartella usata.
+  let lastSaveDir = deps.picturesDir;
 
   const backupState = (): BackupState => ({
     folder: backups.dir,
@@ -151,9 +157,12 @@ export function createHandlers(deps: HandlerDeps): Handlers {
         return true as const;
       }),
     imagesExport: ({ imageId }) =>
-      handle("imagesExport", () => {
-        const target = studio.exportImage(imageId, path.join(deps.picturesDir, "Bottega"));
-        deps.showItemInFolder(target);
+      handle("imagesExport", async () => {
+        if (!studio.image(imageId).path) throw new AppError("L'immagine non è ancora pronta.");
+        const target = await deps.chooseSavePath(studio.exportFileName(imageId), lastSaveDir);
+        if (!target) return null;
+        studio.exportImage(imageId, target);
+        lastSaveDir = path.dirname(target);
         return target;
       }),
 

@@ -82,8 +82,8 @@ export type BottegaRPC = {
       messagesSend: Req<SendRequest, { messageId: string; imageIds: string[] }>;
       imagesRegenerate: Req<{ imageId: string }, { messageId: string; imageIds: string[] }>;
       imagesReveal: Req<{ imageId: string }, true>;
-      /** Copia l'immagine nella cartella Immagini/Bottega e la mostra nel Finder. */
-      imagesExport: Req<{ imageId: string }, string>;
+      /** Apre la finestra «Salva»; restituisce il percorso scelto, o null se annullato. */
+      imagesExport: Req<{ imageId: string }, string | null>;
 
       settingsGet: Req<{}, Settings>;
       settingsSet: Req<Partial<EditableSettings>, Settings>;
