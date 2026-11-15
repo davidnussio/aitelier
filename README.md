@@ -42,6 +42,21 @@ poi «Salva». La chiave va nel portachiavi del sistema (`Bun.secrets`), con
 ripiego su `secrets.json` (permessi 600) nella cartella dati; mai nel database,
 nei log o verso la webview.
 
+## Rilasciare una versione
+
+1. Aggiorna `version` in `package.json` e committa.
+2. Crea il tag e fai il push:
+   ```bash
+   git tag -a v0.2.0 -m "Bottega 0.2.0" && git push origin main v0.2.0
+   ```
+3. Il workflow `Release` (GitHub Actions) controlla, costruisce per Mac Apple
+   Silicon e Mac Intel e crea la release **in bozza** con i DMG e i file per
+   gli aggiornamenti.
+4. Riscrivi le note (la bozza elenca i commit) e pubblica: solo allora le app
+   installate ricevono l'aggiornamento.
+
+Il workflow `Controlli` esegue `bun run check` a ogni push su `main`.
+
 ## Com'è fatto
 
 | Cartella | Contenuto |

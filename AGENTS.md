@@ -21,4 +21,9 @@ Leggi `README.md` per struttura e stato, `docs/spec.md` per la specifica.
   guscio la usa solo se risponde il Vite di Bottega.
 - `bun run check` deve passare: typecheck, `oxlint --deny-warnings`, test.
   Formattazione con `oxfmt`.
+- Release: tag `vX.Y.Z` uguale a `version` in `package.json`; il workflow
+  `.github/workflows/release.yml` crea la release in bozza. Mai pubblicarla
+  senza il via di David: pubblicata, arriva come aggiornamento a tutte le app
+  installate. Una build locale (`bun run build`) aspetta finché è aperta
+  l'app di sviluppo, che tiene il lucchetto di Electrobun.
 - Commit in Conventional Commits, in italiano, senza trailer di attribuzione AI.

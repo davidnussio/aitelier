@@ -1,0 +1,121 @@
+name: Release
+
+# Si parte da un tag: aggiorna "version" in package.json, committa, poi
+#   git tag -a v0.2.0 -m "Bottega 0.2.0" && git push origin main v0.2.0
+# Il workflow crea la release IN BOZZA: le app installate vedono solo le
+# release pubblicate, quindi si scrivono le note e si pubblica a mano.
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: package.json
+
+      - name: Il tag corrisponde alla versione in package.json
+        id: version
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          PACKAGE="$(bun -e 'console.log(require("./package.json").version)')"
+          if [ "$VERSION" != "$PACKAGE" ]; then
+            echo "::error::Il tag $GITHUB_REF_NAME non corrisponde a package.json ($PACKAGE)"
+            exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Dipendenze
+        run: bun install --frozen-lockfile
+
+      - name: Controlli
+        run: bun run check
+
+  build:
+    needs: check
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest # Apple Silicon
+            label: macOS-arm64
+          - os: macos-15-intel # Mac Intel, supportato da GitHub fino all'autunno 2027
+            label: macOS-intel
+          # Windows e Linux: l'app non è ancora stata provata lì (finestra
+          # «Salva», portachiavi). Si aggiungono qui quando lo è.
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: package.json
+
+      - name: Dipendenze
+        run: bun install --frozen-lockfile
+
+      - name: Build (canale stable)
+        run: bun run build
+
+      # Il DMG prende un nome leggibile; il pacchetto e i file update*.json
+      # restano con i nomi che il programma di aggiornamento si aspetta.
+      - name: Nome del DMG
+        run: |
+          for dmg in artifacts/*.dmg; do
+            mv "$dmg" "artifacts/Bottega-${{ needs.check.outputs.version }}-${{ matrix.label }}.dmg"
+          done
+          ls -la artifacts
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bottega-${{ matrix.label }}
+          path: artifacts/*
+          if-no-files-found: error
+
+  release:
+    needs: [check, build]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0 # tutta la storia e i tag, per trovare la release precedente
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      # Bozza delle note: i commit dal tag precedente. Si riscrivono prima di pubblicare.
+      - name: Note dai commit
+        run: |
+          PREVIOUS="$(git describe --tags --abbrev=0 "${GITHUB_REF_NAME}^" 2>/dev/null || true)"
+          RANGE="${PREVIOUS:+$PREVIOUS..}$GITHUB_REF_NAME"
+          {
+            echo "<!-- Bozza generata dai commit ($RANGE): riscrivere prima di pubblicare. -->"
+            echo
+            git log --no-merges --pretty='- %s' "$RANGE"
+          } > notes.md
+          cat notes.md
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: Bottega ${{ needs.check.outputs.version }}
+          body_path: notes.md
+          draft: true
+          files: artifacts/*
+          fail_on_unmatched_files: true
