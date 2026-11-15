@@ -180,6 +180,34 @@ const mainWindow = new BrowserWindow({
 });
 sendJobUpdate = (event) => mainWindow.webview.rpc?.send.jobUpdate(event);
 
+/**
+ * Dopo l'apertura della finestra: scarica un aggiornamento in background e
+ * chiede prima di riavviare, così nessun lavoro in corso viene interrotto.
+ */
+async function checkForUpdates() {
+  if (channel === "dev") return;
+  const info = await Updater.checkForUpdate();
+  if (info.error) log.warn("Controllo degli aggiornamenti con errore", info.error);
+  if (!info.updateAvailable) return;
+  log.info(`Aggiornamento ${info.version} disponibile, lo scarico`);
+  await Updater.downloadUpdate();
+  if (!Updater.updateInfo()?.updateReady) return;
+  const { response } = await Utils.showMessageBox({
+    type: "info",
+    title: "Aggiornamento disponibile",
+    message: `È pronta una nuova versione di Bottega${info.version ? ` (${info.version})` : ""}.`,
+    detail: "Riavvia ora per installarla. Se scegli «Più tardi» te la riproporremo al prossimo avvio.",
+    buttons: ["Riavvia ora", "Più tardi"],
+    defaultId: 0,
+    cancelId: 1,
+  });
+  if (response === 0) await Updater.applyUpdate();
+}
+
+setTimeout(() => {
+  checkForUpdates().catch((error) => log.error("Controllo degli aggiornamenti non riuscito", error));
+}, 5_000);
+
 // Backup automatico giornaliero, lontano dall'avvio.
 setTimeout(() => {
   try {

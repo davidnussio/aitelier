@@ -19,8 +19,14 @@ export default {
       "dist/assets": "views/mainview/assets",
     },
     watchIgnore: ["dist/**"],
+    // Icona macOS: icon.iconset (predefinito). Sorgente: assets/icon-source.webp.
     mac: { bundleCEF: false },
-    linux: { bundleCEF: false },
-    win: { bundleCEF: false },
+    linux: { bundleCEF: false, icon: "assets/icon.png" },
+    win: { bundleCEF: false, icon: "assets/icon.ico" },
+  },
+  release: {
+    // Il programma di aggiornamento legge da qui le release pubblicate.
+    baseUrl: "https://github.com/davidnussio/bottega/releases/latest/download",
+    generatePatch: true,
   },
 } satisfies ElectrobunConfig;

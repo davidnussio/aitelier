@@ -9,7 +9,24 @@ stessa mano. Le immagini le fanno i modelli GPT Image di OpenAI.
 
 Specifica di prodotto: [docs/spec.md](docs/spec.md).
 
-## Avvio
+## Installazione
+
+Scarica il file `.dmg` dall'ultima [release](https://github.com/davidnussio/bottega/releases/latest),
+aprilo e trascina Bottega in Applicazioni. Al primo avvio servono una chiave
+API di OpenAI e, per i modelli di immagini, un'organizzazione OpenAI
+verificata.
+
+L'app non è firmata con un certificato Apple: la prima volta macOS la blocca.
+Apri Impostazioni di Sistema › Privacy e sicurezza e premi «Apri comunque»,
+oppure dal Terminale:
+
+```bash
+xattr -dr com.apple.quarantine /Applications/Bottega.app
+```
+
+Gli aggiornamenti successivi arrivano da soli dalle release di questo repository.
+
+## Sviluppo
 
 ```bash
 bun install
