@@ -2,10 +2,10 @@
  * Ponte per l'anteprima nel browser (scripts/preview.ts): stesse funzioni di
  * rpc.ts, ma via HTTP verso un server locale che usa il core in modalità demo.
  */
-import type { BottegaRPC, Result } from "../../shared/rpc";
+import type { AppRPC, Result } from "../../shared/rpc";
 import type { JobEvent } from "../../shared/types";
 
-type Requests = BottegaRPC["bun"]["requests"];
+type Requests = AppRPC["bun"]["requests"];
 type Value<R> = Extract<R, { ok: true }> extends { value: infer T } ? T : never;
 
 const jobListeners = new Set<(event: JobEvent) => void>();

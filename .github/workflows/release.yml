@@ -1,7 +1,7 @@
 name: Release
 
 # Si parte da un tag: aggiorna "version" in package.json, committa, poi
-#   git tag -a v0.2.0 -m "Bottega 0.2.0" && git push origin main v0.2.0
+#   git tag -a v0.2.0 -m "AItelier 0.2.0" && git push origin main v0.2.0
 # Il workflow crea la release IN BOZZA: le app installate vedono solo le
 # release pubblicate, quindi si scrivono le note e si pubblica a mano.
 
@@ -76,13 +76,13 @@ jobs:
       - name: Nome del DMG
         run: |
           for dmg in artifacts/*.dmg; do
-            mv "$dmg" "artifacts/Bottega-${{ needs.check.outputs.version }}-${{ matrix.label }}.dmg"
+            mv "$dmg" "artifacts/AItelier-${{ needs.check.outputs.version }}-${{ matrix.label }}.dmg"
           done
           ls -la artifacts
 
       - uses: actions/upload-artifact@v4
         with:
-          name: bottega-${{ matrix.label }}
+          name: aitelier-${{ matrix.label }}
           path: artifacts/*
           if-no-files-found: error
 
@@ -114,7 +114,7 @@ jobs:
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name }}
-          name: Bottega ${{ needs.check.outputs.version }}
+          name: AItelier ${{ needs.check.outputs.version }}
           body_path: notes.md
           draft: true
           files: artifacts/*

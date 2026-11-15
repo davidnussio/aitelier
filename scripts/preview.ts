@@ -4,7 +4,7 @@
  * per le schermate (ADR 0004 di dev-commons).
  *
  *   bun run preview            → http://localhost:5292
- *   BOTTEGA_HOME=… per scegliere la cartella dati (predefinita: una temporanea)
+ *   AITELIER_HOME=… per scegliere la cartella dati (predefinita: una temporanea)
  */
 import fs from "node:fs";
 import os from "node:os";
@@ -20,7 +20,7 @@ import type { JobEvent } from "../src/shared/types";
 import pkg from "../package.json";
 
 const PORT = Number(process.env.PORT ?? 5292);
-const dataDir = process.env.BOTTEGA_HOME || fs.mkdtempSync(path.join(os.tmpdir(), "bottega-preview-"));
+const dataDir = process.env.AITELIER_HOME || fs.mkdtempSync(path.join(os.tmpdir(), "aitelier-preview-"));
 const dist = path.resolve(import.meta.dir, "../dist-preview");
 
 const clients = new Set<ReadableStreamDefaultController<string>>();
@@ -65,7 +65,7 @@ const handlers = createHandlers({
   showItemInFolder: (p) => console.log("Mostra nel Finder:", p),
   openExternal: (url) => console.log("Apri:", url),
   log: {
-    file: path.join(dataDir, "logs", "bottega.log"),
+    file: path.join(dataDir, "logs", "aitelier.log"),
     info: (m) => console.log(m),
     error: (m, e) => console.error(m, e),
   },
@@ -105,4 +105,4 @@ Bun.serve({
   },
 });
 
-console.log(`Anteprima Bottega su http://localhost:${PORT} (dati: ${dataDir})`);
+console.log(`Anteprima AItelier su http://localhost:${PORT} (dati: ${dataDir})`);

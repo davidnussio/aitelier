@@ -1,5 +1,5 @@
 /**
- * Fornitore dimostrativo (BOTTEGA_FAKE_OPENAI=1): disegna immagini astratte
+ * Fornitore dimostrativo (AITELIER_FAKE_OPENAI=1): disegna immagini astratte
  * in locale, senza rete né chiave. Serve per i test, le prove dell'interfaccia
  * e le schermate con dati demo. Lo stesso stile produce la stessa palette.
  */

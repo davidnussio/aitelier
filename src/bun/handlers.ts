@@ -10,11 +10,11 @@ import { AppError, ProviderError } from "../core/errors";
 import type { Files } from "../core/files";
 import type { ImageProvider } from "../core/provider";
 import type { Studio } from "../core/studio";
-import type { AppInfo, BottegaRPC, Result } from "../shared/rpc";
+import type { AppInfo, AppRPC, Result } from "../shared/rpc";
 import type { ApiKeyStatus, BackupState, Settings, VerifyResult } from "../shared/types";
 import { readLogTail } from "./log";
 
-type Requests = BottegaRPC["bun"]["requests"];
+type Requests = AppRPC["bun"]["requests"];
 export type Handlers = {
   [K in keyof Requests]: (params: Requests[K]["params"]) => Promise<Requests[K]["response"]>;
 };

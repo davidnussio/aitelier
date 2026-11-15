@@ -3,10 +3,10 @@
  * il messaggio già scritto per l'utente dal processo principale.
  */
 import { Electroview } from "electrobun/view";
-import type { BottegaRPC, Result } from "../../shared/rpc";
+import type { AppRPC, Result } from "../../shared/rpc";
 import type { JobEvent } from "../../shared/types";
 
-type Requests = BottegaRPC["bun"]["requests"];
+type Requests = AppRPC["bun"]["requests"];
 type Value<R> = Extract<R, { ok: true }> extends { value: infer T } ? T : never;
 
 const jobListeners = new Set<(event: JobEvent) => void>();
@@ -16,7 +16,7 @@ export function onJobUpdate(listener: (event: JobEvent) => void): () => void {
   return () => jobListeners.delete(listener);
 }
 
-const rpc = Electroview.defineRPC<BottegaRPC>({
+const rpc = Electroview.defineRPC<AppRPC>({
   maxRequestTime: 60_000,
   handlers: {
     requests: {},

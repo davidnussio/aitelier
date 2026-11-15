@@ -345,7 +345,7 @@ function BackupTab() {
   return (
     <section>
       <p className="text-[13px] text-ink-2">
-        Bottega fa da sé un backup al giorno (tiene gli ultimi 10) e uno prima di ogni aggiornamento del
+        AItelier fa da sé un backup al giorno (tiene gli ultimi 10) e uno prima di ogni aggiornamento del
         database. Il backup contiene progetti, stili e immagini. Sta nella cartella dell'app: per proteggerti
         anche da un guasto del disco, copia ogni tanto la cartella su un disco esterno o nel cloud.
       </p>
@@ -366,7 +366,7 @@ function BackupTab() {
         <div className="mt-4 rounded-lg bg-accent/10 px-3 py-2 text-[13px]">
           <p className="font-medium">Ripristino pronto: {formatDate(pending.createdAt)}</p>
           <p className="text-ink-2">
-            Chiudi Bottega (⌘Q) e riaprila: al riavvio torna tutto com'era in quel momento. Lo stato attuale
+            Chiudi AItelier (⌘Q) e riaprila: al riavvio torna tutto com'era in quel momento. Lo stato attuale
             viene salvato prima in un backup di sicurezza.
           </p>
           <button
@@ -411,7 +411,7 @@ function BackupTab() {
           <p className="text-ink-2">
             Progetti, stili e immagini torneranno com'erano il{" "}
             {formatDate(state.backups.find((b) => b.name === confirm)!.createdAt)}. Quello che hai fatto dopo
-            non sparisce del tutto: prima del ripristino Bottega salva lo stato attuale in un backup di
+            non sparisce del tutto: prima del ripristino AItelier salva lo stato attuale in un backup di
             sicurezza. Il ripristino avviene alla prossima apertura dell'app.
           </p>
           <div className="mt-6 flex justify-end gap-2">

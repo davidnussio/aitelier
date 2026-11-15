@@ -11,7 +11,7 @@ import { FakeProvider } from "../core/fake-provider";
 import { Files } from "../core/files";
 import { OpenAIProvider } from "../core/openai";
 import { Studio } from "../core/studio";
-import type { BottegaRPC } from "../shared/rpc";
+import type { AppRPC } from "../shared/rpc";
 import type { JobEvent } from "../shared/types";
 import { createHandlers } from "./handlers";
 import { chooseSavePath } from "./save-dialog";
@@ -24,15 +24,15 @@ import pkg from "../../package.json";
 const DEV_SERVER_URL = "http://localhost:5291";
 const RPC_TIMEOUT_MS = 60_000;
 
-const dataDir = process.env.BOTTEGA_HOME || Utils.paths.userData;
+const dataDir = process.env.AITELIER_HOME || Utils.paths.userData;
 fs.mkdirSync(dataDir, { recursive: true });
 const log = createLogger(path.join(dataDir, "logs"));
 process.on("uncaughtException", (error) => log.error("Eccezione non gestita", error));
 process.on("unhandledRejection", (reason) => log.error("Promise rifiutata non gestita", reason));
 
-const demo = process.env.BOTTEGA_FAKE_OPENAI === "1";
+const demo = process.env.AITELIER_FAKE_OPENAI === "1";
 const secrets = new SecretStore({
-  service: process.env.BOTTEGA_SECRETS_SERVICE || "ch.dambox.bottega",
+  service: process.env.AITELIER_SECRETS_SERVICE || "ch.dambox.bottega",
   dataDir,
   log: (m, e) => log.warn(m, e),
 });
@@ -82,7 +82,7 @@ async function pickImage(): Promise<Uint8Array | null> {
   return new Uint8Array(await Bun.file(file).arrayBuffer());
 }
 
-const rpc = BrowserView.defineRPC<BottegaRPC>({
+const rpc = BrowserView.defineRPC<AppRPC>({
   maxRequestTime: RPC_TIMEOUT_MS,
   handlers: {
     requests: createHandlers({
@@ -120,7 +120,7 @@ const rpc = BrowserView.defineRPC<BottegaRPC>({
 
 ApplicationMenu.setApplicationMenu([
   {
-    label: "Bottega",
+    label: "AItelier",
     submenu: [
       { role: "about" },
       { type: "separator" },
@@ -161,8 +161,8 @@ async function mainViewUrl(): Promise<string> {
   if (channel === "dev") {
     try {
       const res = await fetch(DEV_SERVER_URL, { signal: AbortSignal.timeout(800) });
-      // Solo se è davvero il Vite di Bottega.
-      if (!(await res.text()).includes("<title>Bottega</title>")) throw new Error("altro server");
+      // Solo se è davvero il Vite di AItelier.
+      if (!(await res.text()).includes("<title>AItelier</title>")) throw new Error("altro server");
       log.info(`HMR attivo: ${DEV_SERVER_URL}`);
       return DEV_SERVER_URL;
     } catch {
@@ -173,7 +173,7 @@ async function mainViewUrl(): Promise<string> {
 }
 
 const mainWindow = new BrowserWindow({
-  title: "Bottega",
+  title: "AItelier",
   url: await mainViewUrl(),
   frame: { width: 1360, height: 860, x: 80, y: 60 },
   rpc,
@@ -195,7 +195,7 @@ async function checkForUpdates() {
   const { response } = await Utils.showMessageBox({
     type: "info",
     title: "Aggiornamento disponibile",
-    message: `È pronta una nuova versione di Bottega${info.version ? ` (${info.version})` : ""}.`,
+    message: `È pronta una nuova versione di AItelier${info.version ? ` (${info.version})` : ""}.`,
     detail: "Riavvia ora per installarla. Se scegli «Più tardi» te la riproporremo al prossimo avvio.",
     buttons: ["Riavvia ora", "Più tardi"],
     defaultId: 0,
@@ -224,4 +224,4 @@ Electrobun.events.on("before-quit", () => {
   db.close();
 });
 
-log.info(`Bottega ${pkg.version} (${channel}${demo ? ", demo" : ""}) avviata. Dati: ${dataDir}`);
+log.info(`AItelier ${pkg.version} (${channel}${demo ? ", demo" : ""}) avviata. Dati: ${dataDir}`);

@@ -1,5 +1,5 @@
 /**
- * Log su file (cartella dati/logs/bottega.log, ruotato a 2 MB). Le chiavi
+ * Log su file (cartella dati/logs/aitelier.log, ruotato a 2 MB). Le chiavi
  * API vengono oscurate anche se finissero per sbaglio in un messaggio.
  */
 import fs from "node:fs";
@@ -25,7 +25,7 @@ function describe(error: unknown): string {
 
 export function createLogger(dir: string) {
   fs.mkdirSync(dir, { recursive: true });
-  const file = path.join(dir, "bottega.log");
+  const file = path.join(dir, "aitelier.log");
 
   function write(level: string, message: string, error?: unknown) {
     const line = redact(`${new Date().toISOString()} ${level} ${message}${describe(error)}\n`);

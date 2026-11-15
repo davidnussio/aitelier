@@ -6,7 +6,7 @@ import { startMediaServer } from "./media-server";
 import { redact } from "./log";
 import { maskKey } from "./secrets";
 
-const dir = fs.mkdtempSync(path.join(os.tmpdir(), "bottega-media-"));
+const dir = fs.mkdtempSync(path.join(os.tmpdir(), "aitelier-media-"));
 fs.mkdirSync(path.join(dir, "images", "t1"), { recursive: true });
 fs.writeFileSync(path.join(dir, "images", "t1", "a.png"), "png");
 fs.mkdirSync(path.join(dir, "styles", "s1", "prove"), { recursive: true });

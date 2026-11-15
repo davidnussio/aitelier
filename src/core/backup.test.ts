@@ -11,7 +11,7 @@ import { Studio } from "./studio";
 
 let dir: string;
 beforeEach(() => {
-  dir = fs.mkdtempSync(path.join(os.tmpdir(), "bottega-backup-"));
+  dir = fs.mkdtempSync(path.join(os.tmpdir(), "aitelier-backup-"));
 });
 afterEach(() => fs.rmSync(dir, { recursive: true, force: true }));
 

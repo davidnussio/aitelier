@@ -1,15 +1,15 @@
 {
-  "name": "bottega",
+  "name": "aitelier",
   "version": "0.1.0",
   "private": true,
-  "description": "Bottega: studio di immagini di famiglia con stili coerenti (Electrobun + GPT Image)",
+  "description": "AItelier: studio di immagini di famiglia con stili coerenti (Electrobun + GPT Image)",
   "type": "module",
   "scripts": {
     "start": "electrobun prepare && vite build && electrobun dev",
     "dev": "electrobun dev --watch",
     "dev:hmr": "concurrently \"bun run hmr\" \"bun run start\"",
     "hmr": "electrobun prepare && vite --port 5291",
-    "demo": "BOTTEGA_FAKE_OPENAI=1 bun run start",
+    "demo": "AITELIER_FAKE_OPENAI=1 bun run start",
     "typecheck": "electrobun prepare && tsc -p tsconfig.json && tsc -p tsconfig.bun.json",
     "lint": "oxlint --deny-warnings",
     "format": "oxfmt",

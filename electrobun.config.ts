@@ -3,7 +3,8 @@ import pkg from "./package.json";
 
 export default {
   app: {
-    name: "Bottega",
+    name: "AItelier",
+    // Resta quello di Bottega (≤ 0.1.0): cartella dati, portachiavi e aggiornamenti dipendono da qui.
     identifier: "ch.dambox.bottega",
     version: pkg.version,
   },

@@ -33,7 +33,7 @@ export interface AppInfo {
 
 type Req<P, R> = { params: P; response: Result<R> };
 
-export type BottegaRPC = {
+export type AppRPC = {
   bun: RPCSchema<{
     requests: {
       appInfo: Req<{}, AppInfo>;

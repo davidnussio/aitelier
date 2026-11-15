@@ -1,4 +1,4 @@
-# Bottega
+# AItelier
 
 A family image studio: a local desktop app that works like a chat, but for
 images. Each project keeps its own context; styles live in a shared library
@@ -8,14 +8,15 @@ image and description, so the images you make today and the ones you make next
 month look like they came from the same hand. Images are made by OpenAI's GPT
 Image models.
 
-The app's interface is in Italian. Product spec (in Italian):
+The app was called Bottega up to version 0.1.0. Its interface is in Italian.
+Product spec (in Italian):
 [docs/spec.md](docs/spec.md).
 
 ## Installation
 
 Download the `.dmg` file from the latest
 [release](https://github.com/davidnussio/bottega/releases/latest), open it and
-drag Bottega to Applications. There are builds for Apple Silicon and Intel
+drag AItelier to Applications. There are builds for Apple Silicon and Intel
 Macs. On first launch you need an OpenAI API key and, for the image models, a
 verified OpenAI organization.
 
@@ -24,7 +25,7 @@ time. Open System Settings › Privacy & Security and click "Open Anyway", or
 run in Terminal:
 
 ```bash
-xattr -dr com.apple.quarantine /Applications/Bottega.app
+xattr -dr com.apple.quarantine /Applications/AItelier.app
 ```
 
 Later versions arrive automatically from this repository's releases.
@@ -50,7 +51,7 @@ folder; never into the database, the logs or the webview.
 1. Update `version` in `package.json` and commit.
 2. Create the tag and push:
    ```bash
-   git tag -a v0.2.0 -m "Bottega 0.2.0" && git push origin main v0.2.0
+   git tag -a v0.2.0 -m "AItelier 0.2.0" && git push origin main v0.2.0
    ```
 3. The `Release` workflow (GitHub Actions) runs the checks, builds for Apple
    Silicon and Intel Macs and creates a **draft** release with the DMGs and the
@@ -71,10 +72,12 @@ The `Controlli` workflow runs `bun run check` on every push to `main`.
 | `scripts/preview.ts` | Browser preview with the same core and the demo provider. |
 
 Data folder: `~/Library/Application Support/ch.dambox.bottega/<channel>/`
-(`BOTTEGA_HOME` to pick another one): `app.db`, `images/<thread>/<id>.png`,
+(`AITELIER_HOME` to pick another one): `app.db`, `images/<thread>/<id>.png`,
 `thumbs/` (WebP), `styles/<style>/` (anchors scaled down to 1024 px, plus
 trial images), `logs/`, `backups/`. The installed app (`stable` channel) and
-the development app (`dev` channel) use separate folders.
+the development app (`dev` channel) use separate folders. The identifier is
+still `ch.dambox.bottega` from the Bottega days, so data, the keychain entry
+and updates carry over to AItelier.
 
 ### Backups and log
 
@@ -86,7 +89,7 @@ the development app (`dev` channel) use separate folders.
   before the database is opened, after a safety backup of the current state.
 - Backups live in the data folder: to be safe from a disk failure, copy them
   somewhere else.
-- The log is `logs/bottega.log` (rotated at 2 MB), readable from Settings ›
+- The log is `logs/aitelier.log` (rotated at 2 MB), readable from Settings ›
   Registro: generations with model, tokens, cost and timing, errors, backups.
 
 ### Style consistency

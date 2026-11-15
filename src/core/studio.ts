@@ -809,7 +809,7 @@ export class Studio {
       thread.title
         .replace(/[^\p{L}\p{N} _-]+/gu, "")
         .trim()
-        .slice(0, 60) || "bottega";
+        .slice(0, 60) || "aitelier";
     // Ora locale, non UTC: è quella che l'utente si aspetta di leggere.
     const d = new Date(image.createdAt);
     const stamp = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}.${pad(d.getMinutes())}`;

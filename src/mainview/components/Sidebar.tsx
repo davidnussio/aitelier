@@ -1,6 +1,7 @@
 import { Palette, Plus, Settings as SettingsIcon } from "lucide-react";
 import type { Settings, ThreadSummary } from "../../shared/types";
 import { formatUsd } from "../lib/format";
+import logoUrl from "../assets/logo.webp";
 import { Button, IconButton, cx } from "./ui";
 
 export function Sidebar({
@@ -27,8 +28,8 @@ export function Sidebar({
   return (
     <aside className="flex min-h-0 flex-col bg-paper-2/60">
       <div className="flex items-center gap-2 px-4 pt-4 pb-3">
-        <Logo />
-        <span className="font-serif text-[22px] leading-none">Bottega</span>
+        <img src={logoUrl} alt="" className="size-8 shrink-0" />
+        <span className="font-serif text-[22px] leading-none">AItelier</span>
         {settings?.demo && (
           <span className="ml-auto rounded-full bg-accent/12 px-2 py-0.5 text-[11px] font-medium text-accent">
             demo
@@ -98,20 +99,5 @@ export function Sidebar({
         </IconButton>
       </div>
     </aside>
-  );
-}
-
-function Logo() {
-  return (
-    <svg width="26" height="26" viewBox="0 0 32 32" aria-hidden>
-      <path
-        d="M16 3c7.5 0 13 5 13 11.5 0 4-3 6-6 6h-2.5a2.5 2.5 0 0 0-1.7 4.3c1 1 .3 4.2-2.8 4.2C8.6 29 3 23.2 3 16S8.6 3 16 3Z"
-        fill="#b5482a"
-      />
-      <circle cx="10" cy="13" r="2.2" fill="#f6f1e8" />
-      <circle cx="16" cy="9" r="2.2" fill="#e8b04a" />
-      <circle cx="22" cy="12.5" r="2.2" fill="#2f6db5" />
-      <circle cx="9.5" cy="20" r="2.2" fill="#3f8f5a" />
-    </svg>
   );
 }

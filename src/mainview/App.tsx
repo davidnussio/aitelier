@@ -223,7 +223,7 @@ function Welcome({
   return (
     <div className="flex flex-1 items-center justify-center p-10">
       <div className="max-w-md text-center">
-        <p className="font-serif text-3xl">Benvenuti in bottega</p>
+        <p className="font-serif text-3xl">Benvenuti nell'atelier</p>
         <p className="mt-3 text-ink-2">
           Gli stili si conservano in una libreria e servono a tutti i progetti. Scegli lo stile, descrivi cosa
           vuoi, invia: le immagini di oggi e quelle del mese prossimo sembreranno della stessa mano.

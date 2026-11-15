@@ -48,7 +48,7 @@ function open() {
 }
 
 beforeEach(() => {
-  dir = fs.mkdtempSync(path.join(os.tmpdir(), "bottega-studio-"));
+  dir = fs.mkdtempSync(path.join(os.tmpdir(), "aitelier-studio-"));
   provider = new RecordingProvider();
   events = [];
   open();

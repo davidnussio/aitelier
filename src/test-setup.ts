@@ -6,5 +6,5 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-process.env.BOTTEGA_HOME = fs.mkdtempSync(path.join(os.tmpdir(), "bottega-test-"));
-process.env.BOTTEGA_SECRETS_SERVICE = "ch.dambox.bottega.test";
+process.env.AITELIER_HOME = fs.mkdtempSync(path.join(os.tmpdir(), "aitelier-test-"));
+process.env.AITELIER_SECRETS_SERVICE = "ch.dambox.bottega.test";
