@@ -15,7 +15,7 @@ Product spec (in Italian):
 ## Installation
 
 Download the `.dmg` file from the latest
-[release](https://github.com/davidnussio/bottega/releases/latest), open it and
+[release](https://github.com/davidnussio/aitelier/releases/latest), open it and
 drag AItelier to Applications. There are builds for Apple Silicon and Intel
 Macs. On first launch you need an OpenAI API key and, for the image models, a
 verified OpenAI organization.

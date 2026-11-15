@@ -27,7 +27,7 @@ export default {
   },
   release: {
     // Il programma di aggiornamento legge da qui le release pubblicate.
-    baseUrl: "https://github.com/davidnussio/bottega/releases/latest/download",
+    baseUrl: "https://github.com/davidnussio/aitelier/releases/latest/download",
     generatePatch: true,
   },
 } satisfies ElectrobunConfig;
