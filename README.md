@@ -1,129 +1,133 @@
 # Bottega
 
-Studio di immagini di famiglia: un'app desktop locale che funziona come una
-chat, ma per le immagini. Ogni progetto conserva il suo contesto; gli stili
-vivono in una libreria comune (voce «Stili» nella barra laterale), senza limite
-di numero, e ogni progetto usa quelli che vuole. Ogni generazione riceve
-l'àncora e la descrizione del suo stile, così le immagini di oggi e quelle del mese prossimo sembrano della
-stessa mano. Le immagini le fanno i modelli GPT Image di OpenAI.
+A family image studio: a local desktop app that works like a chat, but for
+images. Each project keeps its own context; styles live in a shared library
+(the "Stili" entry in the sidebar), with no limit on how many, and each
+project uses the ones it wants. Every generation receives its style's anchor
+image and description, so the images you make today and the ones you make next
+month look like they came from the same hand. Images are made by OpenAI's GPT
+Image models.
 
-Specifica di prodotto: [docs/spec.md](docs/spec.md).
+The app's interface is in Italian. Product spec (in Italian):
+[docs/spec.md](docs/spec.md).
 
-## Installazione
+## Installation
 
-Scarica il file `.dmg` dall'ultima [release](https://github.com/davidnussio/bottega/releases/latest),
-aprilo e trascina Bottega in Applicazioni. Al primo avvio servono una chiave
-API di OpenAI e, per i modelli di immagini, un'organizzazione OpenAI
-verificata.
+Download the `.dmg` file from the latest
+[release](https://github.com/davidnussio/bottega/releases/latest), open it and
+drag Bottega to Applications. There are builds for Apple Silicon and Intel
+Macs. On first launch you need an OpenAI API key and, for the image models, a
+verified OpenAI organization.
 
-L'app non è firmata con un certificato Apple: la prima volta macOS la blocca.
-Apri Impostazioni di Sistema › Privacy e sicurezza e premi «Apri comunque»,
-oppure dal Terminale:
+The app is not signed with an Apple certificate, so macOS blocks it the first
+time. Open System Settings › Privacy & Security and click "Open Anyway", or
+run in Terminal:
 
 ```bash
 xattr -dr com.apple.quarantine /Applications/Bottega.app
 ```
 
-Gli aggiornamenti successivi arrivano da soli dalle release di questo repository.
+Later versions arrive automatically from this repository's releases.
 
-## Sviluppo
+## Development
 
 ```bash
 bun install
-bun run start          # app desktop (Electrobun), dati veri, serve la chiave OpenAI
-bun run demo           # app desktop con il fornitore dimostrativo: niente rete, niente costi
-bun run preview        # interfaccia nel browser su http://localhost:5292, dati demo
-bun run check          # typecheck + oxlint + test
-bun run build          # pacchetto per la distribuzione (canale stable)
+bun run start          # desktop app (Electrobun), real data, needs an OpenAI key
+bun run demo           # desktop app with the demo provider: no network, no cost
+bun run preview        # interface in the browser at http://localhost:5292, demo data
+bun run check          # typecheck + oxlint + tests
+bun run build          # distribution package (stable channel)
 ```
 
-Senza chiave l'app apre le Impostazioni: incolla la chiave, premi «Verifica»,
-poi «Salva». La chiave va nel portachiavi del sistema (`Bun.secrets`), con
-ripiego su `secrets.json` (permessi 600) nella cartella dati; mai nel database,
-nei log o verso la webview.
+Without a key the app opens Settings ("Impostazioni"): paste the key, click
+"Verifica", then "Salva". The key goes into the system keychain
+(`Bun.secrets`), falling back to `secrets.json` (permissions 600) in the data
+folder; never into the database, the logs or the webview.
 
-## Rilasciare una versione
+## Releasing a version
 
-1. Aggiorna `version` in `package.json` e committa.
-2. Crea il tag e fai il push:
+1. Update `version` in `package.json` and commit.
+2. Create the tag and push:
    ```bash
    git tag -a v0.2.0 -m "Bottega 0.2.0" && git push origin main v0.2.0
    ```
-3. Il workflow `Release` (GitHub Actions) controlla, costruisce per Mac Apple
-   Silicon e Mac Intel e crea la release **in bozza** con i DMG e i file per
-   gli aggiornamenti.
-4. Riscrivi le note (la bozza elenca i commit) e pubblica: solo allora le app
-   installate ricevono l'aggiornamento.
+3. The `Release` workflow (GitHub Actions) runs the checks, builds for Apple
+   Silicon and Intel Macs and creates a **draft** release with the DMGs and the
+   update files.
+4. Rewrite the notes (the draft lists the commits) and publish: only then do
+   installed apps receive the update.
 
-Il workflow `Controlli` esegue `bun run check` a ogni push su `main`.
+The `Controlli` workflow runs `bun run check` on every push to `main`.
 
-## Com'è fatto
+## How it is built
 
-| Cartella | Contenuto |
+| Folder | Contents |
 | --- | --- |
-| `src/core` | Tutta la logica, senza import di Electrobun: database (`bun:sqlite`, WAL, migrazioni numerate), composizione del prompt, fornitore OpenAI dietro `ImageProvider`, coda dei lavori (2 in parallelo, 2 nuovi tentativi solo sugli errori temporanei), file. |
-| `src/bun` | Guscio desktop: finestra, menu, RPC tipizzato, portachiavi, log, server locale delle immagini. `handlers.ts` traduce le richieste RPC in chiamate al core. |
-| `src/mainview` | Interfaccia React + Tailwind 4 nella webview. Non ha accesso a rete, disco o chiave. |
-| `src/shared` | Tipi di dominio e schema RPC condivisi. |
-| `scripts/preview.ts` | Anteprima nel browser con lo stesso core e il fornitore dimostrativo. |
+| `src/core` | All the logic, with no Electrobun imports: database (`bun:sqlite`, WAL, numbered migrations), prompt composition, OpenAI provider behind `ImageProvider`, job queue (2 in parallel, 2 retries on temporary errors only), files. |
+| `src/bun` | Desktop shell: window, menu, typed RPC, keychain, logs, local image server, Save dialog. `handlers.ts` turns RPC requests into core calls. |
+| `src/mainview` | React + Tailwind 4 interface in the webview. It has no access to the network, the disk or the key. |
+| `src/shared` | Shared domain types and RPC schema. |
+| `scripts/preview.ts` | Browser preview with the same core and the demo provider. |
 
-Cartella dati: `~/Library/Application Support/ch.dambox.bottega/<canale>/`
-(`BOTTEGA_HOME` per sceglierne un'altra): `app.db`, `images/<thread>/<id>.png`,
-`thumbs/` (WebP), `styles/<stile>/` (àncore ridotte a 1024 px), `logs/`,
-`backups/`.
+Data folder: `~/Library/Application Support/ch.dambox.bottega/<channel>/`
+(`BOTTEGA_HOME` to pick another one): `app.db`, `images/<thread>/<id>.png`,
+`thumbs/` (WebP), `styles/<style>/` (anchors scaled down to 1024 px, plus
+trial images), `logs/`, `backups/`. The installed app (`stable` channel) and
+the development app (`dev` channel) use separate folders.
 
-### Backup e registro
+### Backups and log
 
-- Backup automatico una volta al giorno (restano gli ultimi 10), uno prima di
-  ogni migrazione dello schema, uno manuale da Impostazioni › Backup. Ogni
-  backup è `app.db` (copia coerente con `VACUUM INTO`) più le immagini
-  collegate con hard link: costa pochi KB finché le immagini restano.
-- Il ripristino si prenota da Impostazioni › Backup e avviene al riavvio,
-  prima di aprire il database, dopo un backup di sicurezza dello stato attuale.
-- Il backup sta nella cartella dati: per proteggersi da un guasto del disco
-  va copiato altrove.
-- Registro in `logs/bottega.log` (ruotato a 2 MB), visibile da Impostazioni ›
-  Registro: generazioni con modello, token, costo e tempi, errori, backup.
+- An automatic backup once a day (the last 10 are kept), one before every
+  schema migration, and manual ones from Settings › Backup. Each backup is
+  `app.db` (a consistent copy made with `VACUUM INTO`) plus the images, linked
+  with hard links: it costs a few KB as long as the images stay in place.
+- A restore is booked from Settings › Backup and happens at the next launch,
+  before the database is opened, after a safety backup of the current state.
+- Backups live in the data folder: to be safe from a disk failure, copy them
+  somewhere else.
+- The log is `logs/bottega.log` (rotated at 2 MB), readable from Settings ›
+  Registro: generations with model, tokens, cost and timing, errors, backups.
 
-### Coerenza di stile
+### Style consistency
 
-Ogni chiamata invia le àncore dello stile (mai l'ultima immagine generata) e un
-prompt in ordine fisso: ruolo delle immagini, descrizione dello stile in campi
-fissi, note di contesto del progetto, richiesta dell'utente, vincoli. La
-cronologia della chat non viene inviata. I modelli sono fissati nel progetto
-alla sua creazione. Vedi `src/core/prompt.ts` e i test in `src/core/*.test.ts`.
+Every call sends the style's anchors (never the last generated image) and a
+prompt in a fixed order: role of the images, style description in fixed
+fields, project context notes, the user's request, constraints. The chat
+history is not sent. Models are pinned in a project when it is created. See
+`src/core/prompt.ts` and the tests in `src/core/*.test.ts`.
 
-### Scostamenti dalla specifica
+### Differences from the spec
 
-- Stili senza limite e globali (schema 2): non più 3 slot per progetto, ma una
-  libreria comune; un progetto usa gli stili tramite `thread_styles`. Lo stesso
-  stile vale in tutti i progetti che lo usano (il blocco evita cambi per
-  errore); «Duplica» crea una copia indipendente.
+- Unlimited, global styles (schema 2): instead of 3 slots per project, a shared
+  library; a project uses styles through `thread_styles`. The same style
+  applies in every project that uses it (the lock prevents accidental
+  changes); "Duplica" makes an independent copy.
+- Images reach the webview from an HTTP server on `127.0.0.1` (random port,
+  session token), not from an app scheme: Electrobun 2.0 does not yet expose
+  custom schemes for user files. Never base64 over RPC.
+- Saving an image uses the macOS Save panel through AppleScript, because
+  Electrobun 2.0 has no native Save dialog; on other systems you pick a folder.
+- The cost of describing styles (text model) is not counted yet; image costs
+  are, estimated from the `usage` tokens.
 
-- Le immagini arrivano alla webview da un server HTTP su `127.0.0.1` (porta
-  casuale, token di sessione), non da uno schema dell'app: Electrobun 2.0 non
-  espone ancora schemi personalizzati per file dell'utente. Mai base64 nell'RPC.
-- «Salva» copia l'immagine in `Immagini/Bottega` e la mostra nel Finder:
-  Electrobun 2.0 non ha una finestra di salvataggio nativa.
-- Il costo della descrizione degli stili (modello di testo) non è ancora
-  conteggiato; quello delle immagini sì, stimato dai token di `usage`.
+## Status (phase 1 of the spec)
 
-## Stato (fase 1 della specifica)
+Done: settings with key and verification, projects with context notes,
+unlimited style library (from a description with 3 trials, in the chat or on
+the Stili page; from an uploaded image; from an image in the chat; duplicate,
+use in several projects), automatic style description, lock, generation with
+anchors and 1/2/4 variants, editing an image (new version), regenerate with
+the same settings, Save dialog, errors in Italian, cost per image and per
+month, automatic backups and restore, readable log, app icon, automatic
+updates, release builds on GitHub Actions.
 
-Fatto: impostazioni con chiave e verifica, progetti con note di contesto,
-libreria degli stili senza limite (da descrizione con 3 prove, in chat o
-nella pagina Stili; da immagine caricata; da immagine in chat; duplica, usa in
-più progetti), descrizione automatica dello stile, blocco, generazione con àncore e
-varianti 1/2/4, modifica di un'immagine (nuova versione), rigenera con gli
-stessi criteri, errori in italiano, costo per immagine e del mese, backup
-automatici e ripristino, registro consultabile.
+To do: filterable gallery and ZIP, navigating between versions, monthly
+spending cap, project export/import, signed installer, Windows and Linux
+builds.
 
-Da fare: galleria filtrabile e ZIP, navigazione tra
-versioni, tetto di spesa mensile, esportazione/importazione dei progetti,
-icona e installer firmato.
-
-Modelli predefiniti (impostabili): `gpt-image-2.6-flare` (veloce),
-`gpt-image-2.6-sunburst` (preciso), `gpt-5-mini` per descrivere gli stili.
-Identificativi letti dalla guida OpenAI il 15 novembre 2026; i prezzi in
-`src/core/pricing.ts` sono quelli di GPT Image 2.5 riportati dalle fonti, da
-riverificare.
+Default models (configurable): `gpt-image-2.6-flare` (fast),
+`gpt-image-2.6-sunburst` (precise), `gpt-5-mini` to describe styles.
+Identifiers taken from OpenAI's guide on 15 November 2026; the prices in
+`src/core/pricing.ts` are those reported for GPT Image 2.5 and still need
+checking.
