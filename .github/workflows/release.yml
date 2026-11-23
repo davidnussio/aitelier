@@ -16,6 +16,12 @@ concurrency:
   group: release-${{ github.ref }}
   cancel-in-progress: false
 
+env:
+  # Certificato Developer ID di dambox Sagl. Secret usati per firma e
+  # notarizzazione: MACOS_CERT_P12, MACOS_CERT_PASSWORD, APPLE_API_KEY_P8,
+  # APPLE_API_KEY_ID, APPLE_API_ISSUER (vedi scripts/ci/).
+  DEVELOPER_ID: "Developer ID Application: dambox Sagl (CLFTJ6F63K)"
+
 jobs:
   check:
     runs-on: ubuntu-latest
@@ -68,8 +74,25 @@ jobs:
       - name: Dipendenze
         run: bun install --frozen-lockfile
 
-      - name: Build (canale stable)
+      - name: Prepara firma e notarizzazione
+        run: scripts/ci/macos-signing-setup.sh
+        env:
+          MACOS_CERT_P12: ${{ secrets.MACOS_CERT_P12 }}
+          MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
+          APPLE_API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
+
+      # Electrobun firma l'app, il wrapper e il DMG, poi li notarizza e ci
+      # attacca il ticket (ELECTROBUN_APPLEAPIKEYPATH viene dallo script sopra).
+      - name: Build firmata e notarizzata (canale stable)
+        env:
+          ELECTROBUN_DEVELOPER_ID: ${{ env.DEVELOPER_ID }}
+          ELECTROBUN_APPLEAPIKEY: ${{ secrets.APPLE_API_KEY_ID }}
+          ELECTROBUN_APPLEAPIISSUER: ${{ secrets.APPLE_API_ISSUER }}
         run: bun run build
+
+      - name: Rimuovi portachiavi e chiave API
+        if: always()
+        run: scripts/ci/macos-signing-cleanup.sh
 
       # Il DMG prende un nome leggibile; il pacchetto e i file update*.json
       # restano con i nomi che il programma di aggiornamento si aspetta.
@@ -79,6 +102,21 @@ jobs:
             mv "$dmg" "artifacts/AItelier-${{ needs.check.outputs.version }}-${{ matrix.label }}.dmg"
           done
           ls -la artifacts
+
+      # Si ferma qui se il DMG o l'app dentro non passano Gatekeeper: nessuna
+      # release in bozza con un pacchetto non notarizzato.
+      - name: Verifica firma e notarizzazione
+        run: |
+          DMG="artifacts/AItelier-${{ needs.check.outputs.version }}-${{ matrix.label }}.dmg"
+          xcrun stapler validate "$DMG"
+          spctl --assess --type open --context context:primary-signature --verbose=2 "$DMG"
+          MOUNT="$(mktemp -d)"
+          hdiutil attach "$DMG" -nobrowse -readonly -mountpoint "$MOUNT" > /dev/null
+          trap 'hdiutil detach "$MOUNT" > /dev/null' EXIT
+          for app in "$MOUNT"/*.app; do
+            codesign --verify --deep --strict --verbose=2 "$app"
+            spctl --assess --type execute --verbose=2 "$app"
+          done
 
       - uses: actions/upload-artifact@v4
         with:

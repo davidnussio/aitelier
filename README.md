@@ -20,13 +20,8 @@ drag AItelier to Applications. There are builds for Apple Silicon and Intel
 Macs. On first launch you need an OpenAI API key and, for the image models, a
 verified OpenAI organization.
 
-The app is not signed with an Apple certificate, so macOS blocks it the first
-time. Open System Settings › Privacy & Security and click "Open Anyway", or
-run in Terminal:
-
-```bash
-xattr -dr com.apple.quarantine /Applications/AItelier.app
-```
+Since 0.2.1 the app and the DMG are signed with the Developer ID certificate
+of dambox Sagl and notarized by Apple, so macOS opens them without warnings.
 
 Later versions arrive automatically from this repository's releases.
 
@@ -39,6 +34,13 @@ bun run demo           # desktop app with the demo provider: no network, no cost
 bun run preview        # interface in the browser at http://localhost:5292, demo data
 bun run check          # typecheck + oxlint + tests
 bun run build          # distribution package (stable channel)
+```
+
+A local `bun run build` is unsigned. To sign it with the Developer ID
+certificate in the login keychain (without notarizing):
+
+```bash
+ELECTROBUN_DEVELOPER_ID="Developer ID Application: dambox Sagl (CLFTJ6F63K)" ELECTROBUN_SKIP_NOTARIZATION=1 bun run build
 ```
 
 Without a key the app opens Settings ("Impostazioni"): paste the key, click
@@ -54,12 +56,19 @@ folder; never into the database, the logs or the webview.
    git tag -a v0.2.0 -m "AItelier 0.2.0" && git push origin main v0.2.0
    ```
 3. The `Release` workflow (GitHub Actions) runs the checks, builds for Apple
-   Silicon and Intel Macs and creates a **draft** release with the DMGs and the
-   update files.
+   Silicon and Intel Macs, signs and notarizes the app and the DMG, checks them
+   with `stapler` and `spctl`, and creates a **draft** release with the DMGs
+   and the update files.
 4. Rewrite the notes (the draft lists the commits) and publish: only then do
    installed apps receive the update.
 
 The `Controlli` workflow runs `bun run check` on every push to `main`.
+
+Signing uses these repository secrets: `MACOS_CERT_P12` (the exported
+Developer ID identity, uploaded with `scripts/ci/upload-signing-cert.sh`),
+`MACOS_CERT_PASSWORD`, `APPLE_API_KEY_P8` (base64 of the App Store Connect API
+key), `APPLE_API_KEY_ID` and `APPLE_API_ISSUER`. When the certificate is
+renewed, run `scripts/ci/upload-signing-cert.sh` again.
 
 ## How it is built
 
@@ -123,11 +132,10 @@ use in several projects), automatic style description, lock, generation with
 anchors and 1/2/4 variants, editing an image (new version), regenerate with
 the same settings, Save dialog, errors in Italian, cost per image and per
 month, automatic backups and restore, readable log, app icon, automatic
-updates, release builds on GitHub Actions.
+updates, release builds on GitHub Actions, signed and notarized installer.
 
 To do: filterable gallery and ZIP, navigating between versions, monthly
-spending cap, project export/import, signed installer, Windows and Linux
-builds.
+spending cap, project export/import, Windows and Linux builds.
 
 Default models (configurable): `gpt-image-2.6-flare` (fast),
 `gpt-image-2.6-sunburst` (precise), `gpt-5-mini` to describe styles.
