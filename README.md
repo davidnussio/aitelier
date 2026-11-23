@@ -64,10 +64,11 @@ folder; never into the database, the logs or the webview.
 
 The `Controlli` workflow runs `bun run check` on every push to `main`.
 
-Signing uses these repository secrets: `MACOS_CERT_P12` (the exported
-Developer ID identity, uploaded with `scripts/ci/upload-signing-cert.sh`),
-`MACOS_CERT_PASSWORD`, `APPLE_API_KEY_P8` (base64 of the App Store Connect API
-key), `APPLE_API_KEY_ID` and `APPLE_API_ISSUER`. When the certificate is
+Signing uses these repository secrets: `MACOS_CERT_P12` and
+`MACOS_CERT_PASSWORD` (the exported Developer ID identity and its password,
+both uploaded by `scripts/ci/upload-signing-cert.sh`), `APPLE_API_KEY_P8`
+(base64 of the App Store Connect API key), `APPLE_API_KEY_ID` and
+`APPLE_API_ISSUER`. When the certificate is
 renewed, run `scripts/ci/upload-signing-cert.sh` again.
 
 ## How it is built
