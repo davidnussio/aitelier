@@ -20,6 +20,8 @@
 #   senza argomenti usa --repo davidnussio/aitelier
 #   DRY_RUN=1          ricostruisce e controlla il .p12, non cambia nulla
 #   SOURCE_KEYCHAIN=…  portachiavi da cui esportare (predefinito: login.keychain-db)
+#   FROM_ENVSEC=1      parte dal macos.cert.p12 già in envsec invece di esportare
+#                      il portachiavi (nessuna richiesta di password di macOS)
 set -euo pipefail
 
 CTX="${ENVSEC_CONTEXT:-apple}"
@@ -50,8 +52,13 @@ WORK="$(mktemp -d)"
 chmod 700 "$WORK"
 trap 'rm -rf "$WORK"' EXIT
 
-echo "Esporto le identità del portachiavi (macOS può chiedere la password del portachiavi)..."
-security export -k "$KEYCHAIN" -t identities -f pkcs12 -P "$P12_PASSWORD" -o "$WORK/all.p12" > /dev/null
+if [[ "${FROM_ENVSEC:-}" == "1" ]]; then
+	# Ricostruisce dal .p12 già salvato in envsec (nessuna richiesta del portachiavi).
+	get macos.cert.p12 | tr -d '\n' | base64 -D > "$WORK/all.p12"
+else
+	echo "Esporto le identità del portachiavi (macOS può chiedere la password del portachiavi)..."
+	security export -k "$KEYCHAIN" -t identities -f pkcs12 -P "$P12_PASSWORD" -o "$WORK/all.p12" > /dev/null
+fi
 
 # Un file PEM per ogni certificato e per ogni chiave privata dell'esportazione.
 "$OPENSSL" pkcs12 -in "$WORK/all.p12" -nokeys -passin env:P12_PASSWORD 2> /dev/null |
