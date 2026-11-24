@@ -1,0 +1,75 @@
+name: Homebrew
+
+# When a release is published (the draft created by release.yml, published by
+# hand), updates the cask in davidnussio/homebrew-tap:
+#   brew install --cask davidnussio/tap/aitelier
+# Re-run it for an already published tag from Actions → Homebrew → Run workflow.
+#
+# Required secret: HOMEBREW_TAP_TOKEN, a token with write access to the
+# contents of davidnussio/homebrew-tap (the same one Ingombro and Granello use,
+# kept in `envsec -c github` as homebrew-tap.token).
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Tag of the published release (e.g. v0.2.1)
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: homebrew
+  cancel-in-progress: false
+
+jobs:
+  cask:
+    if: github.event_name == 'workflow_dispatch' || !github.event.release.prerelease
+    runs-on: ubuntu-latest
+    env:
+      TAG: ${{ inputs.tag || github.event.release.tag_name }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          path: aitelier
+
+      - name: SHA-256 of the DMGs
+        id: dmg
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION="${TAG#v}"
+          for arch in arm64 intel; do
+            gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern "AItelier-$VERSION-macOS-$arch.dmg"
+            echo "sha_$arch=$(sha256sum "AItelier-$VERSION-macOS-$arch.dmg" | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+          done
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@v6
+        with:
+          repository: davidnussio/homebrew-tap
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          path: tap
+
+      - name: Cask and commit
+        working-directory: tap
+        env:
+          VERSION: ${{ steps.dmg.outputs.version }}
+          SHA_ARM: ${{ steps.dmg.outputs.sha_arm64 }}
+          SHA_INTEL: ${{ steps.dmg.outputs.sha_intel }}
+        run: |
+          mkdir -p Casks
+          ../aitelier/scripts/homebrew-cask.sh "$VERSION" "$SHA_ARM" "$SHA_INTEL" > Casks/aitelier.rb
+          cat Casks/aitelier.rb
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Casks/aitelier.rb
+          if git diff --cached --quiet; then
+            echo "The cask is already at $VERSION"
+            exit 0
+          fi
+          git commit -m "aitelier $VERSION"
+          git push

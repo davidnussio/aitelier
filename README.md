@@ -14,7 +14,13 @@ Product spec (in Italian):
 
 ## Installation
 
-Download the `.dmg` file from the latest
+With [Homebrew](https://brew.sh):
+
+```bash
+brew install --cask davidnussio/tap/aitelier
+```
+
+Or download the `.dmg` file from the latest
 [release](https://github.com/davidnussio/aitelier/releases/latest), open it and
 drag AItelier to Applications. There are builds for Apple Silicon and Intel
 Macs. On first launch you need an OpenAI API key and, for the image models, a
@@ -61,6 +67,9 @@ folder; never into the database, the logs or the webview.
    and the update files.
 4. Rewrite the notes (the draft lists the commits) and publish: only then do
    installed apps receive the update.
+5. Publishing starts the `Homebrew` workflow, which writes the cask with the
+   SHA-256 of both DMGs to `davidnussio/homebrew-tap` (secret
+   `HOMEBREW_TAP_TOKEN`, from `envsec -c github`, key `homebrew-tap.token`).
 
 The `Controlli` workflow runs `bun run check` on every push to `main`.
 
